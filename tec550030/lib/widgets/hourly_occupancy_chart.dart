@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 import '../../core/theme/app_colors.dart';
@@ -45,6 +45,7 @@ class HourlyOccupancyChart extends StatelessWidget {
               sideTitles: SideTitles(
                 showTitles: true,
                 getTitlesWidget: (value, meta) {
+                  if (value.toInt() % 3 != 0) return const SizedBox.shrink();
                   return Padding(
                     padding: const EdgeInsets.only(top: 8.0),
                     child: Text(
@@ -71,7 +72,7 @@ class HourlyOccupancyChart extends StatelessWidget {
                   color: isCurrentHour
                       ? AppColors.primaryOrange
                       : AppColors.secondaryText.withValues(alpha: 0.3),
-                  width: 16,
+                  width: data.length > 16 ? 8 : 16,
                   borderRadius: const BorderRadius.vertical(
                     top: Radius.circular(4),
                   ),

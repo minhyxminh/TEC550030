@@ -1,279 +1,156 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
+import '../../core/formatters.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../models/reward.dart';
+import '../../services/account_service.dart';
+import '../../services/reward_service.dart';
 import '../../widgets/app_card.dart';
-import '../../widgets/app_button.dart';
-import '../../widgets/hourly_occupancy_chart.dart';
-import '../../services/gym_service.dart';
-import '../../services/gympoint_service.dart';
-import '../../models/occupancy.dart';
-import 'qr_scanner_screen.dart';
+import '../../widgets/catalogue_widgets.dart';
+import '../../widgets/data_view.dart';
+import '../../widgets/membership_summary.dart';
+import '../rewards/reward_detail_screen.dart';
+import '../../widgets/gym_panel.dart';
+
+class _HomeData {
+  final AccountOverview account;
+  final List<Reward> rewards;
+  const _HomeData(this.account, this.rewards);
+}
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
-
+  final ValueChanged<int>? onSelectTab;
+  const HomeScreen({super.key, this.onSelectTab});
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final _gymService = GymService();
-  final _pointService = GymPointService();
-
-  bool _isLoading = true;
-  int _currentOccupancy = 0;
-  int _gymPointBalance = 0;
-  List<HourlyOccupancy> _hourlyData = [];
-
-  // TODO: Update gymId when multiple gyms are supported
-  final String _gymId = '1';
+  int _version = 0;
+  void Function(int)? get onSelectTab => widget.onSelectTab;
+  Future<_HomeData> _load() async {
+    final results = await Future.wait<Object>([
+      AccountService().getOverview(),
+      RewardService().getRewards(),
+    ]);
+    return _HomeData(results[0] as AccountOverview, results[1] as List<Reward>);
+  }
 
   @override
-  void initState() {
-    super.initState();
-    _loadData();
-  }
-
-  Future<void> _loadData() async {
-    // Không dùng API theo yêu cầu, render ngay giao diện
-    setState(() {
-      _currentOccupancy = 47;
-      _gymPointBalance = 1250;
-      _hourlyData = [
-        HourlyOccupancy(hour: 6, count: 12),
-        HourlyOccupancy(hour: 7, count: 30),
-        HourlyOccupancy(hour: 8, count: 45),
-        HourlyOccupancy(hour: 9, count: 32),
-        HourlyOccupancy(hour: 10, count: 20),
-        HourlyOccupancy(hour: 11, count: 15),
-        HourlyOccupancy(hour: 12, count: 47),
-      ];
-      _isLoading = false;
-    });
-  }
-
-  Future<void> _scanQR() async {
-    final qrToken = await Navigator.push<String>(
-      context,
-      MaterialPageRoute(builder: (context) => const QRScannerScreen()),
-    );
-
-    if (qrToken != null) {
-      _handleCheckInOut(qrToken);
-    }
-  }
-
-  Future<void> _handleCheckInOut(String token) async {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
-    );
-
-    try {
-      final result = await _gymService.checkInOut(token);
-      if (mounted) {
-        Navigator.pop(context); // close loading dialog
-        _showSuccessDialog(
-          result['message'] ?? 'Thành công',
-          result['status'] == 'IN',
-        );
-        _loadData(); // reload data to get updated points and occupancy
-      }
-    } catch (e) {
-      if (mounted) {
-        Navigator.pop(context);
-        _showErrorDialog(e.toString());
-      }
-    }
-  }
-
-  void _showSuccessDialog(String message, bool isIn) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.check_circle, color: AppColors.success),
-            const SizedBox(width: 8),
-            Text(
-              isIn ? 'Check-in thành công' : 'Check-out thành công',
-              style: AppTextStyles.heading2,
+  Widget build(BuildContext context) => Scaffold(
+    body: SafeArea(
+      child: DataView<_HomeData>(
+        key: ValueKey(_version),
+        load: _load,
+        builder: (context, data) => [
+          Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Chào bạn,', style: AppTextStyles.caption),
+                    const SizedBox(height: 4),
+                    Text(data.account.user.name, style: AppTextStyles.heading1),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Sẵn sàng cho một ngày năng động?',
+                      style: AppTextStyles.body,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              IconButton(
+                onPressed: () => onSelectTab?.call(4),
+                tooltip: 'Tài khoản',
+                icon: const Icon(
+                  Icons.account_circle_outlined,
+                  size: 36,
+                  color: AppColors.primaryOrange,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          PointBalanceCard(
+            balance: data.account.balance,
+            onTap: () => onSelectTab?.call(1),
+          ),
+          const SizedBox(height: 24),
+          const SectionTitle('Gói tập của bạn'),
+          MembershipSummary(
+            account: data.account,
+            onTap: () => onSelectTab?.call(3),
+          ),
+          const SizedBox(height: 24),
+          GymPanel(onChanged: () => setState(() => _version++)),
+          const SizedBox(height: 24),
+          SectionTitle(
+            'Khám phá phần quà',
+            subtitle: '${data.rewards.length} phần quà trong danh mục',
+            action: TextButton(
+              onPressed: () => onSelectTab?.call(2),
+              child: const Text('Xem tất cả'),
             ),
-          ],
-        ),
-        content: Text(message),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Đóng'),
           ),
-        ],
-      ),
-    );
-  }
-
-  void _showErrorDialog(String error) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.error, color: AppColors.error),
-            const SizedBox(width: 8),
-            const Text('Lỗi', style: AppTextStyles.heading2),
-          ],
-        ),
-        content: Text(error),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Đóng'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: RefreshIndicator(
-          onRefresh: _loadData,
-          color: AppColors.primaryOrange,
-          child: _isLoading
-              ? const Center(
-                  child: CircularProgressIndicator(
-                    color: AppColors.primaryOrange,
-                  ),
-                )
-              : SingleChildScrollView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(24.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Header
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          if (data.rewards.isEmpty)
+            const AppCard(
+              child: Text(
+                'Chưa có phần quà. Hãy quay lại sau nhé.',
+                style: AppTextStyles.body,
+              ),
+            )
+          else
+            ...data.rewards
+                .take(3)
+                .map(
+                  (reward) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: AppCard(
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => RewardDetailScreen(id: reward.id),
+                        ),
+                      ),
+                      child: Row(
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('Chào bạn,', style: AppTextStyles.caption),
-                              Text(
-                                'Hội viên GymFlow',
-                                style: AppTextStyles.heading1,
-                              ),
-                            ],
+                          SizedBox(
+                            width: 56,
+                            height: 56,
+                            child: AppImage(url: reward.imageUrl),
                           ),
-                          const CircleAvatar(
-                            backgroundColor: AppColors.primaryOrange,
-                            child: Icon(Icons.person, color: Colors.white),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  reward.name,
+                                  style: AppTextStyles.heading2,
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '${formatNumber(reward.points)} GP · ${reward.stock > 0 ? 'Còn ${formatNumber(reward.stock)} phần' : 'Hết quà'}',
+                                  style: AppTextStyles.caption,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(
+                            Icons.chevron_right,
+                            color: AppColors.secondaryText,
                           ),
                         ],
                       ),
-                      const SizedBox(height: 24),
-
-                      // Occupancy Card
-                      AppCard(
-                        child: Column(
-                          children: [
-                            const Text(
-                              'SỐ NGƯỜI ĐANG TẬP',
-                              style: AppTextStyles.caption,
-                            ),
-                            const SizedBox(height: 8),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.baseline,
-                              textBaseline: TextBaseline.alphabetic,
-                              children: [
-                                Text(
-                                  '$_currentOccupancy',
-                                  style: AppTextStyles.display.copyWith(
-                                    fontSize: 48,
-                                    color: AppColors.primaryOrange,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                const Text(
-                                  'người',
-                                  style: AppTextStyles.heading2,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            AppButton(text: 'SCAN QR', onPressed: _scanQR),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // GymPoint Summary
-                      AppCard(
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.gymPointYellow.withValues(
-                                      alpha: 0.2,
-                                    ),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.stars,
-                                    color: AppColors.gymPointYellow,
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'GymPoint',
-                                      style: AppTextStyles.caption,
-                                    ),
-                                    Text(
-                                      '$_gymPointBalance',
-                                      style: AppTextStyles.heading2,
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                            const Icon(
-                              Icons.chevron_right,
-                              color: AppColors.secondaryText,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Hourly Chart
-                      const Text(
-                        'Biểu đồ trong ngày',
-                        style: AppTextStyles.heading2,
-                      ),
-                      const SizedBox(height: 16),
-                      AppCard(
-                        child: HourlyOccupancyChart(
-                          data: _hourlyData,
-                          currentHour: DateTime.now().hour,
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
                 ),
-        ),
+          const SizedBox(height: 12),
+        ],
       ),
-    );
-  }
+    ),
+  );
 }

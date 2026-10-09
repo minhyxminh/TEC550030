@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/navigation/app_routes.dart';
 import '../../core/theme/app_colors.dart';
@@ -19,6 +19,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   final _authService = AuthService();
 
   bool _isLoading = false;
@@ -29,15 +30,58 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  void _register() {
-    if (!_formKey.currentState!.validate()) return;
-
-    // Yêu cầu: "Ở phần login hãy chỉ hiện giao diện, chưa cần API đăng nhập"
-    // Khi ấn đăng ký, vào thẳng trang chủ
-    Navigator.pushReplacementNamed(context, AppRoutes.mainLayout);
+  Future<void> _register() async {
+    if (_isLoading || !_formKey.currentState!.validate()) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      final result = await _authService.register(
+        _nameController.text,
+        _emailController.text,
+        _passwordController.text,
+      );
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      if (result.requiresEmailConfirmation) {
+        await showDialog<void>(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Text('Xác nhận email'),
+            content: Text(result.message),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Về đăng nhập'),
+              ),
+            ],
+          ),
+        );
+        if (!mounted) return;
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.login,
+          (_) => false,
+        );
+      } else {
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.mainLayout,
+          (_) => false,
+        );
+      }
+    } catch (error) {
+      if (mounted) setState(() => _errorMessage = error.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -75,7 +119,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.error.withOpacity(0.1),
+                        color: AppColors.error.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -94,8 +138,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     hint: 'Nhập họ và tên',
                     controller: _nameController,
                     validator: (value) {
-                      if (value == null || value.isEmpty) {
+                      if (value == null || value.trim().isEmpty) {
                         return 'Vui lòng nhập họ tên';
+                      }
+                      if (value.trim().length > 100) {
+                        return 'Họ tên tối đa 100 ký tự';
                       }
                       return null;
                     },
@@ -127,8 +174,24 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       if (value == null || value.isEmpty) {
                         return 'Vui lòng nhập mật khẩu';
                       }
-                      if (value.length < 6) {
-                        return 'Mật khẩu phải từ 6 ký tự';
+                      if (value.length < 8 || value.length > 128) {
+                        return 'Mật khẩu phải từ 8 đến 128 ký tự';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  AppInput(
+                    label: 'Nhập lại mật khẩu',
+                    hint: 'Nhập lại mật khẩu của bạn',
+                    controller: _confirmPasswordController,
+                    isPassword: true,
+                    validator: (value) {
+                      if (value == null || value.isEmpty) {
+                        return 'Vui lòng nhập lại mật khẩu';
+                      }
+                      if (value != _passwordController.text) {
+                        return 'Mật khẩu nhập lại không khớp';
                       }
                       return null;
                     },
@@ -138,7 +201,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   AppButton(
                     text: 'Đăng ký',
                     isLoading: _isLoading,
-                    onPressed: _register,
+                    onPressed: _isLoading ? null : _register,
                   ),
                 ],
               ),

@@ -1,0 +1,5 @@
+project_id = "gymflow"
+
+[functions.gymflow-api]
+# Public login/register/catalogues. Private routes verify the user JWT in code.
+verify_jwt = false

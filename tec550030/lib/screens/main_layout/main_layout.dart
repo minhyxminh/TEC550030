@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../home/home_screen.dart';
@@ -17,25 +17,21 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = const [
-    HomeScreen(),
-    GymPointScreen(),
-    RewardsScreen(),
-    ServicesScreen(),
-    ProfileScreen(),
-  ];
+  void _selectTab(int index) => setState(() => _currentIndex = index);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: _screens[_currentIndex],
+      body: [
+        HomeScreen(onSelectTab: _selectTab),
+        const GymPointScreen(),
+        const RewardsScreen(),
+        const ServicesScreen(),
+        ProfileScreen(onSelectTab: _selectTab),
+      ][_currentIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
+        onTap: _selectTab,
         type: BottomNavigationBarType.fixed,
         selectedItemColor: AppColors.primaryOrange,
         unselectedItemColor: AppColors.secondaryText,

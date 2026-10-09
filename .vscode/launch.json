@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "GymFlow",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/tec550030",
+      "program": "${workspaceFolder}/tec550030/lib/main.dart"
+    },
+    {
+      "name": "GymFlow - local Android emulator",
+      "type": "dart",
+      "request": "launch",
+      "cwd": "${workspaceFolder}/tec550030",
+      "program": "${workspaceFolder}/tec550030/lib/main.dart",
+      "toolArgs": ["--dart-define=API_BASE_URL=http://10.0.2.2:3000"]
+    }
+  ]
+}
