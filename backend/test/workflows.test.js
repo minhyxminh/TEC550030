@@ -1,0 +1,100 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { PGlite } from '@electric-sql/pglite';
+
+test('workflows: authorization, atomic balances, idempotency, membership and PT lifecycle', async t => {
+  const db = new PGlite();
+  t.after(() => db.close());
+  await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
+    create schema auth; create table auth.users(id uuid primary key, raw_user_meta_data jsonb);
+    create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+    grant usage on schema auth to authenticated; grant execute on function auth.uid() to authenticated;`);
+  for (const file of ['migrations/001_initial_schema.sql', 'seed.sql', 'migrations/002_workflows.sql']) {
+    await db.exec(await readFile(new URL(`../../supabase/${file}`, import.meta.url), 'utf8'));
+  }
+  // Updating an installed workflow migration must preserve all existing tables/data.
+  await db.exec(await readFile(new URL('../../supabase/migrations/002_workflows.sql',import.meta.url),'utf8'));
+  const member = 'a0000000-0000-4000-8000-000000000001';
+  const admin = 'a0000000-0000-4000-8000-000000000002';
+  const other = 'a0000000-0000-4000-8000-000000000003';
+  const membership = '10000000-0000-4000-8000-000000000001';
+  const reward = '20000000-0000-4000-8000-000000000001';
+  const trainer = '30000000-0000-4000-8000-000000000001';
+  for (const id of [member, admin, other]) await db.query('insert into auth.users values($1,\'{}\')', [id]);
+  await db.query("update public.users set role='ADMIN' where id=$1", [admin]);
+  async function as(id) { await db.exec(`reset role; set role authenticated; set request.jwt.claim.sub='${id}';`); }
+  async function call(action, payload = {}, read = false) {
+    return (await db.query(`select public.${read ? 'gymflow_read' : 'gymflow_command'}($1,$2::jsonb) as data`, [action, JSON.stringify(payload)])).rows[0].data;
+  }
+  const key = () => crypto.randomUUID();
+  await as(member);
+  await assert.rejects(call('admin_qr', {}), /FORBIDDEN/);
+  await assert.rejects(call('admin_dashboard', {}, true), /FORBIDDEN/);
+  await assert.rejects(db.query("select public.gymflow_catalogue('rewards')"), /FORBIDDEN/);
+  const orderPayload = { membership_id: membership, idempotency_key: key() };
+  const order = await call('membership_order', orderPayload);
+  assert.equal((await call('membership_order', orderPayload)).id, order.id);
+  await assert.rejects(call('membership_order', { ...orderPayload, idempotency_key: key() }), /PENDING_ORDER_EXISTS/);
+  await as(admin);
+  const added = (await db.query("select public.gymflow_catalogue('rewards',null,$1) as data", [JSON.stringify({ name: 'Test reward', points: 5, stock: 2 })])).rows[0].data;
+  assert.equal(added.stock, 2);
+  assert.equal(added.is_active, true);
+  const edited = (await db.query("select public.gymflow_catalogue('rewards',$1,$2) as data", [added.id, JSON.stringify({ is_active: false })])).rows[0].data;
+  assert.equal(edited.stock, 2);
+  assert.equal(edited.is_active, false);
+  await assert.rejects(db.query("select public.gymflow_catalogue('users',null,'{}')"), /INVALID_INPUT/);
+  await assert.rejects(db.query("select public.gymflow_catalogue('rewards',$1,'{\"created_at\":\"2000-01-01\"}')", [added.id]), /INVALID_INPUT/);
+  const approved = await call('admin_order', { id: order.id, status: 'APPROVED' });
+  assert.equal((await call('admin_order', { id: order.id, status: 'APPROVED' })).ends_at, approved.ends_at);
+  await assert.rejects(call('admin_order', { id: order.id, status: 'REJECTED' }), /ORDER_PROCESSED/);
+  const tokenHash = 'b'.repeat(64);
+  const qr = await call('admin_qr', { gym_id: '1', minutes: 15, token_hash: tokenHash });
+  assert.equal(qr.token_hash, undefined);
+  await as(other);
+  await assert.rejects(call('check_in', { token_hash: tokenHash }), /MEMBERSHIP_REQUIRED/);
+  await as(member);
+  await assert.rejects(call('check_in', { token_hash: 'c'.repeat(64) }), /INVALID_QR/);
+  const visit = await call('check_in', { token_hash: tokenHash });
+  assert.ok(visit.points_earned > 0);
+  assert.equal((await call('check_in', { token_hash: tokenHash })).points_earned, 0);
+  await call('check_out', { session_id: visit.session.id });
+  await call('check_out', { session_id: visit.session.id });
+  assert.equal((await call('check_in', { token_hash: tokenHash })).points_earned, 0);
+  assert.equal((await call('occupancy', { gym_id: '1' }, true)).count, 1);
+  const hourly = await call('hourly',{gym_id:'1'},true);
+  // Re-entry in the same hour counts one member, not two sessions.
+  assert.equal(hourly.at(-1).count,1);
+  const redemptionPayload = { reward_id: reward, idempotency_key: key() };
+  await assert.rejects(call('redeem', redemptionPayload), /INSUFFICIENT_POINTS/);
+  await db.exec('reset role');
+  await db.query('update public.rewards set points=1,stock=1 where id=$1', [reward]);
+  await as(member);
+  const redemption = await call('redeem', redemptionPayload);
+  assert.equal((await call('redeem', redemptionPayload)).id, redemption.id);
+  await assert.rejects(call('redeem', { ...redemptionPayload, idempotency_key: key() }), /OUT_OF_STOCK/);
+  assert.equal(Number((await db.query('select public.get_my_point_balance() as n')).rows[0].n), visit.points_earned - 1);
+  await as(admin);
+  await call('admin_fulfill', { id: redemption.id });
+  await call('admin_revoke_qr', { id: qr.id });
+  await as(member);
+  await assert.rejects(call('check_in', { token_hash: tokenHash }), /INVALID_QR/);
+  const date = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  const slots = await call('pt_slots', { trainer_id: trainer, date }, true);
+  assert.ok(slots.length > 0);
+  const bookingPayload = { trainer_id: trainer, slot: slots[0].slot, idempotency_key: key() };
+  const booking = await call('book_pt', bookingPayload);
+  assert.equal((await call('book_pt', bookingPayload)).id, booking.id);
+  await as(other);
+  await assert.rejects(call('book_pt', { ...bookingPayload, idempotency_key: key() }), { code: '23505' });
+  await assert.rejects(call('cancel_pt', { id: booking.id }), /NOT_FOUND/);
+  await as(member);
+  await call('cancel_pt', { id: booking.id });
+  await as(other);
+  await call('book_pt', { ...bookingPayload, idempotency_key: key() });
+  const history = await call('history', {}, true);
+  assert.equal(history.orders.length, 0);
+  assert.equal(history.bookings.length, 1);
+  await db.exec('reset role; set role anon;');
+  await assert.rejects(call('occupancy', {}, true), { code: '42501' });
+});

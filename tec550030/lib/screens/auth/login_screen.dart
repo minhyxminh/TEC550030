@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../../core/navigation/app_routes.dart';
 import '../../core/theme/app_colors.dart';
@@ -30,11 +30,26 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
-  void _login() {
-    if (!_formKey.currentState!.validate()) return;
-    
-    // Yêu cầu: "Ở phần login hãy chỉ hiện giao diện, chưa cần API đăng nhập"
-    Navigator.pushReplacementNamed(context, AppRoutes.mainLayout);
+  Future<void> _login() async {
+    if (_isLoading || !_formKey.currentState!.validate()) return;
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+    try {
+      await _authService.login(_emailController.text, _passwordController.text);
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.mainLayout,
+        (_) => false,
+      );
+    } catch (error) {
+      if (mounted) setState(() => _errorMessage = error.toString());
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -112,11 +127,23 @@ class _LoginScreenState extends State<LoginScreen> {
                       return null;
                     },
                   ),
-                  const SizedBox(height: 32),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _isLoading
+                          ? null
+                          : () => Navigator.pushNamed(
+                              context,
+                              AppRoutes.forgotPassword,
+                            ),
+                      child: const Text('Quên mật khẩu?'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   AppButton(
                     text: 'Đăng nhập',
                     isLoading: _isLoading,
-                    onPressed: _login,
+                    onPressed: _isLoading ? null : _login,
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -127,9 +154,14 @@ class _LoginScreenState extends State<LoginScreen> {
                         style: AppTextStyles.body,
                       ),
                       GestureDetector(
-                        onTap: () {
-                          Navigator.pushNamed(context, AppRoutes.register);
-                        },
+                        onTap: _isLoading
+                            ? null
+                            : () {
+                                Navigator.pushNamed(
+                                  context,
+                                  AppRoutes.register,
+                                );
+                              },
                         child: Text(
                           'Đăng ký ngay',
                           style: AppTextStyles.body.copyWith(

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_text_styles.dart';
@@ -51,7 +51,9 @@ class AppButton extends StatelessWidget {
             : Text(
                 text,
                 style: AppTextStyles.button.copyWith(
-                  color: isSecondary
+                  color: onPressed == null
+                      ? AppColors.secondaryText
+                      : isSecondary
                       ? AppColors.primaryOrange
                       : AppColors.white,
                 ),

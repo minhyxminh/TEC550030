@@ -1,0 +1,98 @@
+@base_url = http://localhost:3000
+@access_token = REPLACE_AFTER_LOGIN
+@email = REPLACE_WITH_YOUR_EMAIL
+
+### Health: real database read
+GET {{base_url}}/health
+
+### Register (confirm email before login if confirmation is enabled)
+POST {{base_url}}/auth/register
+Content-Type: application/json
+
+{"name":"Nguyen Van A","email":"{{email}}","password":"GymflowDemo2026!"}
+
+### Login: copy access_token into the variable above
+POST {{base_url}}/auth/login
+Content-Type: application/json
+
+{"email":"{{email}}","password":"GymflowDemo2026!"}
+
+### Profile
+GET {{base_url}}/me
+Authorization: Bearer {{access_token}}
+
+### Dynamic rewards
+GET {{base_url}}/rewards
+
+### Reward detail
+GET {{base_url}}/rewards/20000000-0000-4000-8000-000000000001
+
+### Membership catalogue
+GET {{base_url}}/memberships
+
+### Trainers
+GET {{base_url}}/trainers
+
+### Balance
+GET {{base_url}}/points/balance
+Authorization: Bearer {{access_token}}
+
+### History
+GET {{base_url}}/points/history?limit=20&offset=0
+Authorization: Bearer {{access_token}}
+
+### Must fail with 401
+GET {{base_url}}/me
+Authorization: Bearer forged-token
+
+### Activity (all four histories)
+GET {{base_url}}/activity?limit=20&offset=0
+Authorization: Bearer {{access_token}}
+
+### Create a membership order: use a NEW UUID for a new intent, reuse for retries
+POST {{base_url}}/membership-orders
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{"membership_id":"10000000-0000-4000-8000-000000000001","idempotency_key":"60000000-0000-4000-8000-000000000001"}
+
+### Admin only: issue QR, copy token into check-in body
+POST {{base_url}}/admin/qr-tokens
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{"gym_id":"1","minutes":15}
+
+### Check-in as member with active membership
+POST {{base_url}}/gym/check-in
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{"token":"paste-token-from-admin-QR"}
+
+### Current session / occupancy
+GET {{base_url}}/gym/session
+Authorization: Bearer {{access_token}}
+
+### Occupancy
+GET {{base_url}}/gym/1/occupancy
+Authorization: Bearer {{access_token}}
+
+### Hourly occupancy, today in Vietnam
+GET {{base_url}}/gym/1/hourly
+Authorization: Bearer {{access_token}}
+
+### Redeem: reuse key on retry, new UUID for next redemption
+POST {{base_url}}/redemptions
+Authorization: Bearer {{access_token}}
+Content-Type: application/json
+
+{"reward_id":"20000000-0000-4000-8000-000000000001","idempotency_key":"60000000-0000-4000-8000-000000000002"}
+
+### Available trainer slots (replace date)
+GET {{base_url}}/trainers/30000000-0000-4000-8000-000000000001/slots?date=2026-10-10
+Authorization: Bearer {{access_token}}
+
+### Admin pending work
+GET {{base_url}}/admin/dashboard?limit=20&offset=0
+Authorization: Bearer {{access_token}}

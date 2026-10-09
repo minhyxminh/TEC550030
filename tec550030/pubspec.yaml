@@ -39,7 +39,10 @@ dependencies:
   mobile_scanner: ^7.4.2
   fl_chart: ^1.2.0
   intl: ^0.20.3
+  qr_flutter: ^4.1.0
+  image_picker: ^1.2.1
 
+  material_ui: any
 dev_dependencies:
   flutter_test:
     sdk: flutter
