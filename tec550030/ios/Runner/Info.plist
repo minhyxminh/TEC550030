@@ -4,6 +4,8 @@
 <dict>
     <key>NSCameraUsageDescription</key>
     <string>GymFlow dùng camera để quét QR check-in tại phòng tập.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>GymFlow dùng vị trí khi bạn chọn cơ sở tập gần mình.</string>
     <key>NSPhotoLibraryUsageDescription</key>
     <string>GymFlow dùng thư viện ảnh để bạn chọn ảnh đại diện, phần thưởng và huấn luyện viên.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>

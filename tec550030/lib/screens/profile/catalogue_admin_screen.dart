@@ -20,7 +20,6 @@ const _labels = <String, String>{
   'image_url': 'URL ảnh (có thể để trống)',
   'price_vnd': 'Giá (VNĐ)',
   'duration_days': 'Số ngày',
-  'points_per_checkin': 'Điểm mỗi check-in',
   'specialty': 'Chuyên môn',
   'experience_years': 'Số năm kinh nghiệm',
 };
@@ -29,7 +28,6 @@ const _numeric = {
   'stock',
   'price_vnd',
   'duration_days',
-  'points_per_checkin',
   'experience_years',
 };
 const _fields = <String, List<String>>{
@@ -39,7 +37,6 @@ const _fields = <String, List<String>>{
     'description',
     'price_vnd',
     'duration_days',
-    'points_per_checkin',
   ],
   'trainers': [
     'name',

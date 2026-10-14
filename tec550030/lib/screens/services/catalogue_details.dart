@@ -26,8 +26,8 @@ class MembershipDetailScreen extends StatelessWidget {
         const SectionTitle('Quyền lợi GymPoint'),
         AppCard(
           child: Text(
-            'Nhận ${formatNumber(membership.pointsPerCheckin)} GP khi check-in bằng QR mới. '
-            'Mỗi QR chỉ thưởng điểm một lần; bạn vẫn có thể ra vào lại.',
+            'Nhận tối đa ${formatNumber(membership.pointsPerCheckin)} GP mỗi ngày có check-in hợp lệ. '
+            'Khi gói được kích hoạt, bạn nhận ${formatNumber(membership.pointsOnActivation)} GP.',
             style: AppTextStyles.body,
           ),
         ),

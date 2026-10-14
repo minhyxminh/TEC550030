@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:tec550030/core/api/api_client.dart';
 import 'package:tec550030/core/theme/app_theme.dart';
+import 'package:tec550030/models/user.dart';
 import 'package:tec550030/screens/profile/activity_screen.dart';
 import 'package:tec550030/screens/profile/admin_screen.dart';
 import 'package:tec550030/screens/profile/catalogue_admin_screen.dart';
@@ -151,8 +152,13 @@ void main() {
       String? sentToken;
       ApiClient.httpClient = mockApi((req) {
         if (req.url.path == '/gym/session') return jsonResponse(session);
-        if (req.url.path == '/gym/1/occupancy') {
+        if (req.url.path == '/gym/gym-west/occupancy') {
           return jsonResponse({'count': session == null ? 0 : 1});
+        }
+        if (req.url.path == '/gym/gym-west/hourly') {
+          return jsonResponse([
+            {'hour': 6, 'count': session == null ? 0 : 1},
+          ]);
         }
         if (req.url.path == '/gym/check-in') {
           sentToken = jsonDecode(req.body)['token'];
@@ -175,7 +181,20 @@ void main() {
       });
       await page(
         tester,
-        const Scaffold(body: SingleChildScrollView(child: GymPanel())),
+        Scaffold(
+          body: SingleChildScrollView(
+            child: GymPanel(
+              user: User(
+                id: 'member-id',
+                name: 'Member',
+                email: 'member@example.com',
+                activeMembershipId: 'membership-id',
+                homeGymId: 'gym-west',
+                membershipActive: true,
+              ),
+            ),
+          ),
+        ),
       );
       expect(find.text('0 người đang tập'), findsOneWidget);
       await tester.tap(find.text('Nhập mã thay cho camera'));
@@ -285,6 +304,62 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
   );
+
+  testWidgets('admin can cancel membership after confirmation and preserves open session notice', (
+    tester,
+  ) async {
+    var cancelled = false;
+    Map<String, dynamic>? cancellationBody;
+    ApiClient.httpClient = mockApi((req) {
+      if (req.url.path == '/admin/dashboard') {
+        return jsonResponse({'orders': [], 'redemptions': [], 'qr_tokens': []});
+      }
+      if (req.url.path == '/admin/members') {
+        return jsonResponse(cancelled
+            ? []
+            : [
+                {
+                  'user_id': 'member-1',
+                  'name': 'Member One',
+                  'membership_name': 'Basic',
+                  'home_gym_id': 'gym-west',
+                  'membership_expires_at': '2099-01-01T00:00:00Z',
+                  'has_open_session': true,
+                },
+              ]);
+      }
+      if (req.url.path == '/admin/members/member-1/cancel-membership') {
+        cancellationBody = jsonDecode(req.body);
+        cancelled = true;
+        return jsonResponse({'user_id': 'member-1', 'has_open_session': true});
+      }
+      if (req.url.path == '/admin/qr-current') {
+        return jsonResponse({
+          'id': 'qr-1',
+          'gym_id': '1',
+          'token': 'AB12CD34EF',
+          'expires_at': DateTime.now().add(const Duration(minutes: 15)).toUtc().toIso8601String(),
+        });
+      }
+      return fixtureResponse(req);
+    });
+
+    await page(tester, const AdminScreen());
+  await tester.drag(find.byType(ListView).first, const Offset(0, -600));
+  await tester.pumpAndSettle();
+    expect(find.text('Member One · Basic'), findsOneWidget);
+    expect(find.textContaining('phiên vẫn được giữ để check-out'), findsOneWidget);
+    final cancelButton = find.widgetWithText(AppButton, 'Hủy membership');
+    tester.widget<AppButton>(cancelButton).onPressed!.call();
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Lịch sử điểm và buổi tập sẽ được giữ.'), findsOneWidget);
+    await tester.tap(find.text('Xác nhận'));
+    await tester.pumpAndSettle();
+    expect(cancelled, isTrue);
+    expect(cancellationBody!['reason'], 'Hủy theo quyết định Admin.');
+    expect(find.text('Membership đã hủy. Buổi tập đang mở vẫn có thể check-out.'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+  });
 
   testWidgets(
     'admin catalogue form submits validated fields and archives without deleting history',

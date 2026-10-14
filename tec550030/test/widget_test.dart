@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'dart:ui' as ui;
 
 import 'package:material_ui/material_ui.dart';
@@ -11,10 +12,12 @@ import 'package:tec550030/core/api/api_client.dart';
 import 'package:tec550030/core/theme/app_theme.dart';
 import 'package:tec550030/main.dart';
 import 'package:tec550030/screens/gympoint/gympoint_screen.dart';
+import 'package:tec550030/screens/home/home_screen.dart';
 import 'package:tec550030/screens/profile/profile_screen.dart';
 import 'package:tec550030/screens/rewards/rewards_screen.dart';
 import 'package:tec550030/screens/services/services_screen.dart';
 import 'package:tec550030/widgets/app_button.dart';
+import 'package:tec550030/services/location_service.dart';
 
 import 'api_fixtures.dart';
 
@@ -98,6 +101,7 @@ void main() {
       expect(find.text('Lê Minh Anh'), findsOneWidget);
       expect(find.text('80'), findsOneWidget);
       expect(find.text('Basic'), findsOneWidget);
+      expect(find.text('Quét QR check-in'), findsOneWidget);
       expect(find.text('47'), findsNothing);
       expect(tester.takeException(), isNull);
       await capture(tester, 'home');
@@ -127,6 +131,80 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Lê Minh Anh'), findsOneWidget);
     expect(await ApiClient.getToken(), 'valid-token');
+  });
+
+  testWidgets('Home sends members without an active package to Join', (
+    tester,
+  ) async {
+    int? selectedTab;
+    ApiClient.httpClient = mockApi((request) async {
+      if (request.url.path == '/me') {
+        return jsonResponse({
+          ...profile,
+          'active_membership_id': null,
+          'membership_expires_at': null,
+          'membership_active': false,
+        });
+      }
+      return fixtureResponse(request);
+    });
+    await showPage(
+      tester,
+      HomeScreen(onSelectTab: (index) => selectedTab = index),
+    );
+    expect(find.text('Tham gia'), findsOneWidget);
+    final joinButton = find.widgetWithText(AppButton, 'Tham gia');
+    tester.widget<AppButton>(joinButton).onPressed!.call();
+    expect(selectedTab, 3);
+  });
+
+  testWidgets('Home sends active members without a selected gym to Join', (
+    tester,
+  ) async {
+    ApiClient.httpClient = mockApi((request) async {
+      if (request.url.path == '/me') {
+        return jsonResponse({...profile, 'home_gym_id': null});
+      }
+      return fixtureResponse(request);
+    });
+    await showPage(tester, const HomeScreen());
+    expect(find.text('Tham gia'), findsOneWidget);
+    expect(find.text('Quét QR check-in'), findsNothing);
+    expect(find.text('Chọn cơ sở để xem occupancy.'), findsOneWidget);
+  });
+
+  testWidgets('Home only enables check-in after explicit branch selection', (
+    tester,
+  ) async {
+    String? selectedGym;
+    ApiClient.httpClient = mockApi((request) async {
+      if (request.url.path == '/me') {
+        return jsonResponse({...profile, 'home_gym_id': selectedGym});
+      }
+      if (request.url.path == '/me/home-gym') {
+        selectedGym = jsonDecode(request.body)['gym_id'] as String;
+        return jsonResponse({...profile, 'home_gym_id': selectedGym});
+      }
+      return fixtureResponse(request);
+    });
+    await showPage(
+      tester,
+      HomeScreen(
+        locationService: LocationService(
+          locationProvider: () async => const LocationResult(denied: true),
+        ),
+      ),
+    );
+    expect(find.text('Tham gia'), findsOneWidget);
+    tester.widget<AppButton>(find.widgetWithText(AppButton, 'Tham gia'))
+        .onPressed!
+        .call();
+    await tester.pumpAndSettle();
+    expect(find.text('Chọn cơ sở tập'), findsOneWidget);
+    await tester.tap(find.text('GymFlow Hậu Giang'));
+    await tester.pumpAndSettle();
+    expect(selectedGym, 'q5');
+    expect(find.text('Quét QR check-in'), findsOneWidget);
   });
 
   testWidgets(
@@ -239,7 +317,8 @@ void main() {
     await showPage(tester, const ServicesScreen());
     expect(find.text('300.000 ₫'), findsOneWidget);
     expect(find.text('30 ngày'), findsOneWidget);
-    expect(find.text('10 GP / QR mới'), findsOneWidget);
+    expect(find.text('+5 GP / ngày'), findsOneWidget);
+    expect(find.text('+100 GP kích hoạt'), findsOneWidget);
     await capture(tester, 'memberships');
     await tester.tap(find.text('Basic'));
     await tester.pumpAndSettle();

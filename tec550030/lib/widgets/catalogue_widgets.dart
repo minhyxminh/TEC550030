@@ -209,8 +209,12 @@ class MembershipCard extends StatelessWidget {
           children: [
             StatusPill('${membership.durationDays} ngày'),
             StatusPill(
-              '${formatNumber(membership.pointsPerCheckin)} GP / QR mới',
+              '+${formatNumber(membership.pointsPerCheckin)} GP / ngày',
               color: AppColors.deepOrange,
+            ),
+            StatusPill(
+              '+${formatNumber(membership.pointsOnActivation)} GP kích hoạt',
+              color: AppColors.success,
             ),
             if (status != null) StatusPill(status!, color: AppColors.success),
           ],

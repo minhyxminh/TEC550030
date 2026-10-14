@@ -21,11 +21,33 @@ http.Client mockApi(FutureOr<http.Response> Function(http.Request) handler) =>
 const membershipId = '10000000-0000-4000-8000-000000000001';
 const rewardId = '20000000-0000-4000-8000-000000000001';
 const trainerId = '30000000-0000-4000-8000-000000000001';
+const gymBranches = [
+  {
+    'id': '1',
+    'name': 'GymFlow Nguyễn Chí Thanh',
+    'address': 'Khu Nguyễn Chí Thanh',
+    'district': 'Quận 10',
+    'latitude': 10.7724,
+    'longitude': 106.6676,
+    'opening_hours': '06:00-22:00',
+  },
+  {
+    'id': 'q5',
+    'name': 'GymFlow Hậu Giang',
+    'address': 'Khu Hậu Giang',
+    'district': 'Quận 6',
+    'latitude': 10.7481,
+    'longitude': 106.6358,
+    'opening_hours': '06:00-22:00',
+  },
+];
 const profile = {
   'id': 'a0000000-0000-4000-8000-000000000001',
   'name': 'Lê Minh Anh',
   'email': 'anh@example.com',
   'active_membership_id': membershipId,
+  'home_gym_id': '1',
+  'membership_active': true,
   'membership_expires_at': '2099-11-08T12:00:00Z',
   'created_at': '2026-10-08T12:00:00Z',
 };
@@ -35,7 +57,8 @@ const membership = {
   'description': 'Gói tập cơ bản dành cho hội viên.',
   'price_vnd': 300000,
   'duration_days': 30,
-  'points_per_checkin': 10,
+  'points_per_checkin': 5,
+  'points_on_activation': 100,
 };
 const trainer = {
   'id': trainerId,
@@ -101,7 +124,20 @@ http.Response jsonResponse(Object? data, [int status = 200]) => http.Response(
   headers: {'content-type': 'application/json; charset=utf-8'},
 );
 http.Response fixtureResponse(http.Request request) {
+  if (request.url.path.startsWith('/gym/') && request.url.path.endsWith('/occupancy')) {
+    return jsonResponse({'count': 3});
+  }
+  if (request.url.path.startsWith('/gym/') && request.url.path.endsWith('/hourly')) {
+    return jsonResponse([
+      {'hour': 6, 'count': 2},
+      {'hour': 7, 'count': 3},
+    ]);
+  }
   switch (request.url.path) {
+    case '/gyms':
+      return jsonResponse(gymBranches);
+    case '/me/home-gym':
+      return jsonResponse({...profile, 'home_gym_id': jsonDecode(request.body)['gym_id']});
     case '/gym/session':
       return http.Response(
         'null',
@@ -126,6 +162,8 @@ http.Response fixtureResponse(http.Request request) {
         'orders': [],
         'bookings': [],
       });
+    case '/admin/members':
+      return jsonResponse([]);
     case '/auth/login':
       return jsonResponse({
         'user': profile,

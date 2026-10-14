@@ -40,13 +40,19 @@ const businessErrors = {
   UNAUTHORIZED: [401, 'Cần đăng nhập.'], FORBIDDEN: [403, 'Chỉ quản trị viên được thực hiện thao tác này.'],
   NOT_FOUND: [404, 'Không tìm thấy dữ liệu.'], PROFILE_NOT_FOUND: [404, 'Chưa có hồ sơ người dùng.'],
   INVALID_INPUT: [400, 'Dữ liệu không hợp lệ.'], INVALID_QR: [400, 'QR không hợp lệ, đã hết hạn hoặc bị thu hồi.'],
+  GYM_REQUIRED: [403, 'Bạn cần được gán cơ sở trước khi check-in.'], WRONG_GYM: [403, 'QR này không thuộc cơ sở của bạn.'],
+  GYM_NOT_FOUND: [404, 'Cơ sở không tồn tại hoặc đang ngừng hoạt động.'],
+  OPEN_SESSION: [409, 'Hãy check-out trước khi đổi cơ sở tập.'],
   MEMBERSHIP_REQUIRED: [403, 'Bạn cần gói tập còn hạn để check-in.'],
+  MEMBERSHIP_NOT_ACTIVE: [409, 'Hội viên không có membership đang hoạt động.'],
   ALREADY_CHECKED_IN: [409, 'Bạn đang có buổi tập chưa check-out.'],
   INSUFFICIENT_POINTS: [409, 'Bạn chưa đủ GymPoint để đổi quà.'], OUT_OF_STOCK: [409, 'Phần quà đã hết hàng.'],
   REQUEST_CONFLICT: [409, 'Yêu cầu thử lại không khớp yêu cầu ban đầu.'],
   PENDING_ORDER_EXISTS: [409, 'Bạn đã có đơn gói tập chờ duyệt.'],
   INVALID_SLOT: [400, 'Chọn giờ tròn từ 06:00 đến 21:00 trong 30 ngày tới.'],
   BOOKING_STARTED: [409, 'Buổi tập đã bắt đầu, không thể hủy.'], ORDER_PROCESSED: [409, 'Đơn này đã được xử lý.'],
+  GYM_NOT_FOUND: [404, 'Cơ sở không tồn tại hoặc đang ngừng hoạt động.'],
+  OPEN_SESSION: [409, 'Hãy check-out trước khi đổi cơ sở tập.'],
 };
 async function workflow(client, name, action, payload = {}) {
   const result = await client.rpc(name, { action, payload });
@@ -157,7 +163,7 @@ export function createApp({ createSupabase, corsOrigins = [], trustProxy = false
 
   const catalogues = [
     ['rewards', 'id,name,description,points,stock,image_url,created_at'],
-    ['memberships', 'id,name,description,price_vnd,duration_days,points_per_checkin,created_at'],
+    ['memberships', 'id,name,description,price_vnd,duration_days,points_per_checkin,points_on_activation,created_at'],
     ['trainers', 'id,name,specialty,experience_years,description,image_url,created_at'],
   ];
   for (const [table, fields] of catalogues) {
@@ -173,6 +179,20 @@ export function createApp({ createSupabase, corsOrigins = [], trustProxy = false
       res.json(record);
     });
   }
+  app.get('/gyms', async (req, res) => {
+    const { limit, offset } = page.parse(req.query);
+    res.json(databaseResult(await createSupabase().from('gyms')
+      .select('id,name,address,district,latitude,longitude,opening_hours')
+      .eq('is_active', true).order('district').order('name')
+      .range(offset, offset + limit - 1)));
+  });
+  app.get('/gyms', async (req, res) => {
+    const { limit, offset } = page.parse(req.query);
+    res.json(databaseResult(await createSupabase().from('gyms')
+      .select('id,name,address,district,latitude,longitude,opening_hours')
+      .eq('is_active', true).order('district').order('name')
+      .range(offset, offset + limit - 1)));
+  });
 
   // Token is verified with Supabase Auth. RLS also checks the user JWT on reads.
   const requireAuth = async (req, _res, next) => {
@@ -188,8 +208,7 @@ export function createApp({ createSupabase, corsOrigins = [], trustProxy = false
   };
 
   app.get('/me', requireAuth, async (req, res) => {
-    const user = databaseResult(await req.supabase.from('users')
-      .select('id,name,role,avatar_path,active_membership_id,membership_expires_at,created_at').eq('id', req.userId).maybeSingle());
+    const user = databaseResult(await req.supabase.rpc('gymflow_my_profile'));
     if (!user) throw new ApiError(404, 'PROFILE_NOT_FOUND', 'Chưa có hồ sơ. Kiểm tra migration và trigger tạo user.');
     const avatar = user.avatar_path ? req.supabase.storage.from('gymflow-images').getPublicUrl(user.avatar_path).data.publicUrl : null;
     res.json({ ...user, email: req.authUser.email, avatar_url: avatar });
@@ -215,6 +234,24 @@ export function createApp({ createSupabase, corsOrigins = [], trustProxy = false
     const payload = z.object({ name: z.string().trim().min(1).max(100), avatar_path: z.string().max(300).nullable().optional() }).strict().parse(req.body);
     const result = await req.supabase.rpc('gymflow_update_profile', { payload });
     if (result.error?.message === 'INVALID_IMAGE') throw new ApiError(400, 'INVALID_IMAGE', 'Ảnh đại diện không hợp lệ. Vui lòng tải lại ảnh.');
+    res.json(databaseResult(result));
+  });
+  app.post('/me/home-gym', requireAuth, async (req, res) => {
+    const input = z.object({ gym_id: gymId }).strict().parse(req.body);
+    const result = await req.supabase.rpc('gymflow_select_home_gym', {
+      gym_id_input: input.gym_id,
+    });
+    const known = businessErrors[result.error?.message];
+    if (known) throw new ApiError(known[0], result.error.message, known[1]);
+    res.json(databaseResult(result));
+  });
+  app.post('/me/home-gym', requireAuth, async (req, res) => {
+    const input = z.object({ gym_id: gymId }).strict().parse(req.body);
+    const result = await req.supabase.rpc('gymflow_select_home_gym', {
+      gym_id_input: input.gym_id,
+    });
+    const known = businessErrors[result.error?.message];
+    if (known) throw new ApiError(known[0], result.error.message, known[1]);
     res.json(databaseResult(result));
   });
   app.post('/media/:kind', requireAuth, express.raw({ type: ['image/jpeg', 'image/png', 'image/webp'], limit: '3mb' }), async (req, res) => {
@@ -274,6 +311,26 @@ export function createApp({ createSupabase, corsOrigins = [], trustProxy = false
   app.get('/admin/dashboard', requireAuth, async (req, res) => {
     res.json(await workflow(req.supabase, 'gymflow_read', 'admin_dashboard', page.parse(req.query)));
   });
+  app.get('/admin/members', requireAuth, async (req, res) => {
+    const { limit, offset } = page.parse(req.query);
+    const result = await req.supabase.rpc('gymflow_admin_members', {
+      page_limit: limit,
+      page_offset: offset,
+    });
+    if (result.error?.message === 'FORBIDDEN') throw new ApiError(403, 'FORBIDDEN', 'Chỉ quản trị viên được thực hiện thao tác này.');
+    res.json(databaseResult(result));
+  });
+  app.post('/admin/members/:id/cancel-membership', requireAuth, async (req, res) => {
+    const { reason } = z.object({ reason: z.string().trim().max(500).default('') })
+      .strict().parse(req.body ?? {});
+    const result = await req.supabase.rpc('gymflow_admin_cancel_membership', {
+      target_user_id: uuid.parse(req.params.id),
+      cancellation_reason: reason,
+    });
+    const known = businessErrors[result.error?.message];
+    if (known) throw new ApiError(known[0], result.error.message, known[1]);
+    res.json(databaseResult(result));
+  });
   app.get('/admin/qr-current', requireAuth, async (req, res) => {
     const input = z.object({ gym_id: gymId.default('1') }).strict().parse(req.query);
     const result = await req.supabase.rpc('gymflow_current_qr', input);
@@ -302,7 +359,7 @@ export function createApp({ createSupabase, corsOrigins = [], trustProxy = false
   const imageUrl = z.union([z.literal(''), z.url().refine(value => /^https?:\/\//.test(value))]).default('');
   const catalogueSchemas = {
     rewards: z.object({ ...commonFields, points: z.number().int().positive().max(1000000), stock: z.number().int().min(0).max(1000000).default(0), image_url: imageUrl }).strict(),
-    memberships: z.object({ ...commonFields, price_vnd: z.number().int().min(0).max(2147483647), duration_days: z.number().int().min(1).max(3650), points_per_checkin: z.number().int().min(1).max(1000000) }).strict(),
+    memberships: z.object({ ...commonFields, price_vnd: z.number().int().min(0).max(2147483647), duration_days: z.number().int().min(1).max(3650), points_per_checkin: z.literal(5).default(5) }).strict(),
     trainers: z.object({ ...commonFields, specialty: z.string().max(500).default(''), experience_years: z.number().int().min(0).max(100).default(0), image_url: imageUrl }).strict(),
   };
   async function catalogueWrite(req, table, changes, id = null) {

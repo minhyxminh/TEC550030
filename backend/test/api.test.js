@@ -33,16 +33,26 @@ function fakeSupabase({ databaseError = null, sessionData = session, rpcResult, 
             select(fields) { query.fields = fields; return this; },
             eq(field, value) { query.filters.push([field, value]); return this; },
             is(field, value) { query.filters.push([field, value]); return this; },
-            order() { return this; },
+            order(field) { (query.orders ??= []).push(field); return this; },
             range(start, end) { query.range = [start, end]; return this; },
             async maybeSingle() { return { data: table === 'users' ? { id: memberId, name: 'Member',role } : null, error: databaseError }; },
             then(resolve, reject) {
-              return Promise.resolve({ data: table === 'rewards' ? [{ id: 'reward-id', name: 'Water', points: 20, stock: 50, image_url: '' }] : [], error: databaseError }).then(resolve, reject);
+              const rows = table === 'rewards'
+                ? [{ id: 'reward-id', name: 'Water', points: 20, stock: 50, image_url: '' }]
+                : table === 'gyms'
+                ? [{ id: '1', name: 'GymFlow Nguyễn Chí Thanh', district: 'Quận 10' }]
+                : [];
+              return Promise.resolve({ data: rows, error: databaseError }).then(resolve, reject);
             },
           };
           return builder;
         },
-        async rpc(name, args) { calls.push({ rpc: name, token, args }); return rpcResult ? rpcResult(name,args) : { data: 30, error: databaseError }; },
+        async rpc(name, args) {
+          calls.push({ rpc: name, token, args });
+          if (rpcResult) return rpcResult(name,args);
+          if (name === 'gymflow_my_profile') return { data: { id: memberId, name: 'Member', role, home_gym_id: '1', membership_active: true }, error: databaseError };
+          return { data: 30, error: databaseError };
+        },
         storage:{ from(bucket) { return {
           async upload(path,bytes,options) {calls.push({upload:{bucket,path,bytes:Array.from(bytes),options},token});return {error:null};},
           getPublicUrl(path) {return {data:{publicUrl:`https://example.supabase.co/storage/v1/object/public/${bucket}/${path}`}};},
@@ -90,12 +100,79 @@ test('workflow routes validate inputs and pass JWT-scoped commands with hashed Q
 });
 
 test('workflow business conflicts map to safe HTTP errors', async t => {
-  for(const [message, status] of [['FORBIDDEN',403],['INSUFFICIENT_POINTS',409],['INVALID_QR',400],['NOT_FOUND',404]]) {
+  for(const [message, status] of [['FORBIDDEN',403],['GYM_REQUIRED',403],['WRONG_GYM',403],['GYM_NOT_FOUND',404],['OPEN_SESSION',409],['MEMBERSHIP_NOT_ACTIVE',409],['INSUFFICIENT_POINTS',409],['INVALID_QR',400],['NOT_FOUND',404]]) {
     const api=await start(t, { databaseError:{code:'P0001',message} });
     const res=await fetch(`${api.url}/gym/check-in`,{method:'POST',headers:{Authorization:'Bearer valid-token','Content-Type':'application/json'},body:JSON.stringify({token:'test'})});
     assert.equal(res.status,status);
     assert.equal((await res.json()).code,message);
   }
+});
+
+test('branch catalogue is public and home-gym selection is authenticated and RPC-backed', async t => {
+  const api = await start(t, {
+    rpcResult(name, args) {
+      if (name === 'gymflow_select_home_gym') return { data: { id: memberId, home_gym_id: args.gym_id_input }, error: null };
+      return { data: null, error: null };
+    },
+  });
+  const list = await fetch(`${api.url}/gyms?limit=10&offset=0`);
+  assert.equal(list.status, 200);
+  assert.equal((await list.json())[0].id, '1');
+  const catalogueQuery = api.calls.find(call => call.table === 'gyms');
+  assert.equal(catalogueQuery.token, undefined);
+  assert.deepEqual(catalogueQuery.fields, 'id,name,address,district,latitude,longitude,opening_hours');
+  assert.deepEqual(catalogueQuery.filters, [['is_active', true]]);
+  assert.deepEqual(catalogueQuery.orders, ['district', 'name']);
+  assert.deepEqual(catalogueQuery.range, [0, 9]);
+
+  const body = { gym_id: 'q5' };
+  assert.equal((await fetch(`${api.url}/me/home-gym`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  })).status, 401);
+  const selected = await fetch(`${api.url}/me/home-gym`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer valid-token', 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  assert.equal(selected.status, 200);
+  assert.equal((await selected.json()).home_gym_id, 'q5');
+  assert.deepEqual(api.calls.find(call => call.rpc === 'gymflow_select_home_gym').args, { gym_id_input: 'q5' });
+  assert.equal((await fetch(`${api.url}/me/home-gym`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer valid-token', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ gym_id: 'q5', role: 'ADMIN' }),
+  })).status, 400);
+});
+
+test('Admin member listing and membership cancellation use role-checked RPCs', async t => {
+  const api = await start(t, {
+    rpcResult(name, args) {
+      if (name === 'gymflow_admin_members') return { data: [{ user_id: memberId, name: 'Member', membership_name: 'Basic' }], error: null };
+      if (name === 'gymflow_admin_cancel_membership') return { data: { user_id: memberId, cancelled_at: '2026-10-12T00:00:00Z' }, error: null };
+      return { data: null, error: null };
+    },
+  });
+  const headers = { Authorization: 'Bearer valid-token', 'Content-Type': 'application/json' };
+  const members = await fetch(`${api.url}/admin/members?limit=10&offset=0`, { headers });
+  assert.equal(members.status, 200);
+  assert.equal((await members.json())[0].membership_name, 'Basic');
+  const listCall = api.calls.find(call => call.rpc === 'gymflow_admin_members');
+  assert.equal(listCall.token, 'valid-token');
+  assert.deepEqual(listCall.args, { page_limit: 10, page_offset: 0 });
+
+  const response = await fetch(`${api.url}/admin/members/${memberId}/cancel-membership`, {
+    method: 'POST', headers, body: JSON.stringify({ reason: 'Admin cancellation' }),
+  });
+  assert.equal(response.status, 200);
+  const cancelCall = api.calls.find(call => call.rpc === 'gymflow_admin_cancel_membership');
+  assert.equal(cancelCall.token, 'valid-token');
+  assert.deepEqual(cancelCall.args, { target_user_id: memberId, cancellation_reason: 'Admin cancellation' });
+
+  const denied = await start(t, { rpcResult: () => ({ data: null, error: { code: 'P0001', message: 'FORBIDDEN' } }) });
+  const deniedResponse = await fetch(`${denied.url}/admin/members/${memberId}/cancel-membership`, {
+    method: 'POST', headers, body: JSON.stringify({ reason: '' }),
+  });
+  assert.equal(deniedResponse.status, 403);
 });
 
 test('catalogue PATCH preserves omitted stock/default fields and rejects arbitrary fields', async t => {
@@ -106,6 +183,17 @@ test('catalogue PATCH preserves omitted stock/default fields and rejects arbitra
   const rpc=api.calls.find(c=>c.rpc==='gymflow_catalogue');
   assert.deepEqual(rpc.args.changes,{name:'Updated'});
   assert.equal((await fetch(url,{method:'PATCH',headers:auth,body:JSON.stringify({user_id:memberId})})).status,400);
+});
+
+test('membership catalogue fixes check-in points at five GP and rejects tier-specific rates', async t => {
+  const api=await start(t);
+  const headers={Authorization:'Bearer valid-token','Content-Type':'application/json'};
+  const base={name:'Starter',price_vnd:100000,duration_days:30};
+  const created=await fetch(`${api.url}/admin/memberships`,{method:'POST',headers,body:JSON.stringify(base)});
+  assert.equal(created.status,201);
+  assert.equal(api.calls.find(c=>c.rpc==='gymflow_catalogue').args.changes.points_per_checkin,5);
+  const invalid=await fetch(`${api.url}/admin/memberships`,{method:'POST',headers,body:JSON.stringify({...base,name:'Premium',points_per_checkin:20})});
+  assert.equal(invalid.status,400);
 });
 
 test('rewards response matches Flutter list contract and uses active filter/pagination', async t => {
@@ -129,14 +217,16 @@ test('private profile rejects absent and forged JWT before querying data', async
   assert.ok(!api.calls.some(call => call.table === 'users'));
 });
 
-test('profile uses verified JWT user, ignoring supplied user_id', async t => {
+test('profile uses verified JWT user and database-derived membership state', async t => {
   const api = await start(t);
   const response = await fetch(`${api.url}/me?user_id=someone-else`, { headers: { Authorization: 'Bearer valid-token' } });
   assert.equal(response.status, 200);
-  assert.equal((await response.json()).id, memberId);
-  const query = api.calls.find(call => call.table === 'users');
+  const body = await response.json();
+  assert.equal(body.id, memberId);
+  assert.equal(body.home_gym_id, '1');
+  assert.equal(body.membership_active, true);
+  const query = api.calls.find(call => call.rpc === 'gymflow_my_profile');
   assert.equal(query.token, 'valid-token');
-  assert.deepEqual(query.filters, [['id', memberId]]);
 });
 
 test('balance uses database aggregate, history uses verified user', async t => {

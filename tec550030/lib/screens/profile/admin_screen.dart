@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../../core/api/api_client.dart';
 import '../../widgets/hourly_qr_card.dart';
 
 import '../../core/formatters.dart';
@@ -36,7 +37,13 @@ class _AdminScreenState extends State<AdminScreen> {
           (data['redemptions'] as List).length == 20;
       if (!more) break;
     }
-    return {'orders': orders, 'redemptions': redemptions, 'has_more': more};
+    final members = await ApiClient.getJson('/admin/members?limit=100&offset=0') as List;
+    return {
+      'orders': orders,
+      'redemptions': redemptions,
+      'members': members,
+      'has_more': more,
+    };
   }
 
   @override
@@ -61,6 +68,41 @@ class _AdminScreenState extends State<AdminScreen> {
         ),
         const SizedBox(height: 20),
         const HourlyQrCard(),
+        const SizedBox(height: 24),
+        const SectionTitle('Membership đang hoạt động'),
+        if ((data['members'] as List).isEmpty)
+          const AppCard(child: Text('Không có membership đang hoạt động.')),
+        ...(data['members'] as List<dynamic>).map(
+          (member) => Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    '${member['name']} · ${member['membership_name'] ?? 'Membership'}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Text('Cơ sở ${member['home_gym_id'] ?? 'chưa gán'} · Hạn ${activityDate(member['membership_expires_at'])}'),
+                  if (member['has_open_session'] == true)
+                    const Text('Hội viên đang có buổi tập mở; phiên vẫn được giữ để check-out.'),
+                  const SizedBox(height: 12),
+                  WorkflowButton(
+                    text: 'Hủy membership',
+                    confirmation:
+                        'Hủy membership của hội viên này ngay? Lịch sử điểm và buổi tập sẽ được giữ.',
+                    success: 'Membership đã hủy. Buổi tập đang mở vẫn có thể check-out.',
+                    action: () => ApiClient.postJson(
+                      '/admin/members/${member['user_id']}/cancel-membership',
+                      {'reason': 'Hủy theo quyết định Admin.'},
+                    ),
+                    onSuccess: _refresh,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
         const SizedBox(height: 24),
         const SectionTitle('Đơn gói tập chờ duyệt'),
         if ((data['orders'] as List).isEmpty)

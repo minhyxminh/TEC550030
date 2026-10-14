@@ -4,7 +4,10 @@ import '../../core/formatters.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../models/reward.dart';
+import '../../models/user.dart';
 import '../../services/account_service.dart';
+import '../../services/branch_service.dart';
+import '../../services/location_service.dart';
 import '../../services/reward_service.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/catalogue_widgets.dart';
@@ -12,6 +15,7 @@ import '../../widgets/data_view.dart';
 import '../../widgets/membership_summary.dart';
 import '../rewards/reward_detail_screen.dart';
 import '../../widgets/gym_panel.dart';
+import 'branch_selection_screen.dart';
 
 class _HomeData {
   final AccountOverview account;
@@ -21,7 +25,14 @@ class _HomeData {
 
 class HomeScreen extends StatefulWidget {
   final ValueChanged<int>? onSelectTab;
-  const HomeScreen({super.key, this.onSelectTab});
+  final BranchService branchService;
+  final LocationService locationService;
+  const HomeScreen({
+    super.key,
+    this.onSelectTab,
+    this.branchService = const BranchService(),
+    this.locationService = const LocationService(),
+  });
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
@@ -29,6 +40,23 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _version = 0;
   void Function(int)? get onSelectTab => widget.onSelectTab;
+  Future<void> _join(User user) async {
+    if (user.homeGymId != null) {
+      onSelectTab?.call(3);
+      return;
+    }
+    final selected = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BranchSelectionScreen(
+          branchService: widget.branchService,
+          locationService: widget.locationService,
+        ),
+      ),
+    );
+    if (selected == true && mounted) setState(() => _version++);
+  }
+
   Future<_HomeData> _load() async {
     final results = await Future.wait<Object>([
       AccountService().getOverview(),
@@ -85,7 +113,11 @@ class _HomeScreenState extends State<HomeScreen> {
             onTap: () => onSelectTab?.call(3),
           ),
           const SizedBox(height: 24),
-          GymPanel(onChanged: () => setState(() => _version++)),
+          GymPanel(
+            user: data.account.user,
+            onJoin: () => _join(data.account.user),
+            onChanged: () => setState(() => _version++),
+          ),
           const SizedBox(height: 24),
           SectionTitle(
             'Khám phá phần quà',

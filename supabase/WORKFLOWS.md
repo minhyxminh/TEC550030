@@ -1,14 +1,18 @@
 # Kích hoạt API và UI GymFlow
 
-**Cập nhật mới:** QR lưu lại và tự đổi mỗi giờ, upload ảnh, quên mật khẩu. Với database đã có 001/002, làm theo [UPDATES_003.md](UPDATES_003.md) để áp dụng 003 và cấu hình Cron/email.
+**Cập nhật mới:** QR lưu lại và tự đổi mỗi giờ, upload ảnh, quên mật khẩu. Giữ nguyên 003 và lịch QR. Áp dụng migrations 004–006 cho Phase 1; migration 007 thêm catalogue cơ sở và lựa chọn home gym.
 
 Code đã bổ sung check-in/check-out, thống kê phòng tập, đổi quà, đơn gói tập, lịch PT, lịch sử hoạt động và quản trị. Không cần thêm secret/service_role vào Flutter hoặc backend: các RPC lấy danh tính từ JWT và kiểm tra quyền trong database.
 
 ## 1. Cập nhật database một lần
 
-Trong Supabase project `resjlmqdtxubcbdpvtds`, mở **SQL Editor → New query**, dán toàn bộ `supabase/migrations/002_workflows.sql`, chọn **Run**. File này chạy sau `001_initial_schema.sql`; không chạy lại file 001 trên database đã có bảng. Migration 002 giữ dữ liệu đang có và có thể chạy lại để cập nhật functions.
+Trong Supabase project `resjlmqdtxubcbdpvtds`, chạy migrations theo thứ tự `001` → `002` → `003` → `004` → `005` → `006` → `007`. Với database đã triển khai migrations 001–006, chỉ chạy `supabase/migrations/007_phase2a_gym_branches.sql`; không sửa hoặc chạy lại migration cũ. Migration 007 tạo `public.gyms`, giữ branch ID `'1'` tương thích QR hiện tại, và chỉ đổi home gym qua RPC xác thực người dùng, branch active, và không có phiên mở.
 
-Các RPC dùng transaction và row lock cho cộng/trừ điểm, tồn kho và duyệt đơn. Mỗi tài khoản/QR chỉ cộng điểm một lần. Đổi quà, gửi đơn và đặt lịch có `idempotency_key` để gửi lại sau lỗi mạng không tạo thêm giao dịch. RLS vẫn bật; quyền ghi trực tiếp vẫn bị chặn. Cách đặt search_path và giới hạn execute theo [hướng dẫn Database Functions của Supabase](https://supabase.com/docs/guides/database/functions).
+Các RPC dùng transaction và row lock cho cộng/trừ điểm, tồn kho và duyệt đơn. Mỗi thành viên nhận cố định 5 GP tối đa một lần mỗi ngày Việt Nam, kể cả khi vào lại hoặc dùng QR hourly khác. Check-out không cộng điểm; duyệt gói cộng một lần 100/200/300 GP cho Basic/Premium/VIP. Đổi quà, gửi đơn và đặt lịch có `idempotency_key`; redeem cập nhật balance ledger và stock trong cùng transaction. Check-in và occupancy bị giới hạn theo cơ sở đã gán. RLS vẫn bật; quyền ghi trực tiếp vẫn bị chặn.
+
+Admin → Membership đang hoạt động → **Hủy membership**. Membership hết hiệu lực ngay; hồ sơ và đơn đã duyệt, nếu có, ghi lại người/thời điểm/lý do hủy. Đơn, GymPoint ledger, lịch sử phiên và phiên đang mở không bị xóa. Phiên đang mở vẫn có thể check-out, còn check-in mới sẽ bị từ chối. Quyền Admin được kiểm tra trong RPC.
+
+Member mới hoặc chưa chọn cơ sở: Home → **Tham gia** → chọn cơ sở. Cho phép vị trí để sắp xếp gần nhất trước và xem khoảng cách; từ chối vẫn có thể chọn cơ sở theo thứ tự danh sách. Sau khi chọn, profile được tải lại. Chỉ membership đang hoạt động cùng home gym đã chọn mới mở occupancy/check-in.
 
 ## 2. Cập nhật API đã deploy
 
@@ -70,7 +74,11 @@ Tất cả route dưới đây cần `Authorization: Bearer <access_token>`.
 | GET `/trainers/:id/slots?date=YYYY-MM-DD` | Khung giờ và trạng thái còn trống, không lộ hội viên khác |
 | POST `/pt-bookings` | `{trainer_id,slot,idempotency_key}`; slot ISO8601 có timezone |
 | POST `/pt-bookings/:id/cancel` | Hủy lịch của mình |
+| GET `/gyms?limit=100&offset=0` | Cơ sở đang hoạt động; public catalogue |
+| POST `/me/home-gym` | `{gym_id}`; chọn cơ sở của chính mình, từ chối nếu có phiên mở |
 | GET `/admin/dashboard?limit=20&offset=0` | Đơn/quà chờ xử lý và QR còn hạn |
+| GET `/admin/members?limit=100&offset=0` | Membership đang hoạt động; chỉ ADMIN |
+| POST `/admin/members/:id/cancel-membership` | `{reason?}`; hủy membership đang hoạt động; chỉ ADMIN |
 | POST `/admin/qr-tokens` | `{gym_id,minutes}`; trả token thô một lần |
 | POST `/admin/qr-tokens/:id/revoke` | Thu hồi QR |
 | POST `/admin/membership-orders/:id/review` | `{status:APPROVED hoặc REJECTED}` |

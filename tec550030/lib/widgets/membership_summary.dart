@@ -63,7 +63,8 @@ class MembershipSummary extends StatelessWidget {
             if (membership != null && active) ...[
               const SizedBox(height: 8),
               Text(
-                '${formatNumber(membership.pointsPerCheckin)} GP cho mỗi QR check-in mới',
+                '${formatNumber(membership.pointsPerCheckin)} GP mỗi ngày check-in · '
+                '${formatNumber(membership.pointsOnActivation)} GP khi kích hoạt',
                 style: AppTextStyles.caption,
               ),
             ],

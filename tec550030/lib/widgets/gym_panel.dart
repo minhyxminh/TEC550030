@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../core/api/api_client.dart';
 import '../core/formatters.dart';
 import '../models/occupancy.dart';
+import '../models/user.dart';
 import '../screens/home/qr_scanner_screen.dart';
 import 'app_button.dart';
 import 'app_card.dart';
@@ -12,8 +13,17 @@ import 'catalogue_widgets.dart';
 import 'hourly_occupancy_chart.dart';
 
 class GymPanel extends StatefulWidget {
+  final User user;
+  final VoidCallback? onJoin;
   final VoidCallback? onChanged;
-  const GymPanel({super.key, this.onChanged});
+  const GymPanel({
+    super.key,
+    required this.user,
+    this.onJoin,
+    this.onChanged,
+  });
+  String? get gymId => user.homeGymId;
+  bool get canCheckIn => user.canCheckIn;
   @override
   State<GymPanel> createState() => _GymPanelState();
 }
@@ -27,6 +37,15 @@ class _GymPanelState extends State<GymPanel> {
   bool _choosing = false;
   int _generation = 0;
   Timer? _timer;
+  @override
+  void didUpdateWidget(covariant GymPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.user.homeGymId != widget.user.homeGymId ||
+      oldWidget.user.hasActiveMembership != widget.user.hasActiveMembership) {
+      _load();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -45,16 +64,19 @@ class _GymPanelState extends State<GymPanel> {
   Future<void> _load() async {
     final generation = ++_generation;
     try {
-      final data = await Future.wait<dynamic>([
-        ApiClient.getJson('/gym/session'),
-        ApiClient.getJson('/gym/1/occupancy'),
-        ApiClient.getJson('/gym/1/hourly'),
-      ]);
+      final requests = <Future<dynamic>>[ApiClient.getJson('/gym/session')];
+      if (widget.canCheckIn) {
+        requests.add(ApiClient.getJson('/gym/${widget.gymId}/occupancy'));
+        requests.add(ApiClient.getJson('/gym/${widget.gymId}/hourly'));
+      }
+      final data = await Future.wait<dynamic>(requests);
       if (mounted && generation == _generation) {
         setState(() {
           _session = data[0];
-          _occupancy = data[1]['count'];
-          _hourly = (data[2] as List<dynamic>)
+            _occupancy = widget.canCheckIn ? data[1]['count'] : null;
+            _hourly = !widget.canCheckIn
+              ? []
+              : (data[2] as List<dynamic>)
               .map((e) => HourlyOccupancy.fromJson(e))
               .toList();
           _error = null;
@@ -70,6 +92,10 @@ class _GymPanelState extends State<GymPanel> {
   Future<void> _act({bool manual = false}) async {
     if (_busy || _choosing) return;
     final sessionId = _session?['id'] as String?;
+    if (sessionId == null && !widget.canCheckIn) {
+      widget.onJoin?.call();
+      return;
+    }
     String? token;
     if (sessionId == null) {
       _choosing = true;
@@ -142,7 +168,11 @@ class _GymPanelState extends State<GymPanel> {
         const SizedBox(height: 8),
         Text(
           _session == null
-              ? 'Quét QR tại quầy để bắt đầu buổi tập.'
+              ? widget.canCheckIn
+                    ? 'Quét QR tại cơ sở của bạn để bắt đầu buổi tập.'
+                  : widget.gymId == null
+                  ? 'Chọn cơ sở tập để tiếp tục.'
+                  : 'Chọn gói tập để bắt đầu check-in.'
               : 'Đang tập từ ${formatDateTime(DateTime.parse(_session!['check_in_at']))}',
         ),
         const SizedBox(height: 16),
@@ -151,25 +181,39 @@ class _GymPanelState extends State<GymPanel> {
           const SizedBox(height: 12),
         ],
         AppButton(
-          text: _session == null ? 'Quét QR check-in' : 'Check-out',
+          text: _session != null
+              ? 'Check-out'
+              : widget.canCheckIn
+              ? 'Quét QR check-in'
+              : 'Tham gia',
           isLoading: _busy,
-          onPressed: () => _act(),
+          onPressed: _session != null || widget.canCheckIn
+              ? () => _act()
+              : widget.onJoin,
         ),
-        if (_session == null)
+        if (_session == null && widget.canCheckIn)
           TextButton(
             onPressed: _busy ? null : () => _act(manual: true),
             child: const Text('Nhập mã thay cho camera'),
           ),
         const SizedBox(height: 20),
-        const Text('Số người có mặt trong từng giờ · giờ Việt Nam'),
-        const SizedBox(height: 12),
-        HourlyOccupancyChart(
-          data: _hourly,
-          currentHour: DateTime.now()
-              .toUtc()
-              .add(const Duration(hours: 7))
-              .hour,
-        ),
+        if (!widget.canCheckIn)
+          Text(
+            widget.gymId == null
+                ? 'Chọn cơ sở để xem occupancy.'
+                : 'Chọn gói tập đang hoạt động để xem occupancy.',
+          )
+        else ...[
+          const Text('Số người có mặt trong từng giờ · giờ Việt Nam'),
+          const SizedBox(height: 12),
+          HourlyOccupancyChart(
+            data: _hourly,
+            currentHour: DateTime.now()
+                .toUtc()
+                .add(const Duration(hours: 7))
+                .hour,
+          ),
+        ],
       ],
     ),
   );

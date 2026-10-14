@@ -1,8 +1,8 @@
 # GymFlow — Backend Foundation với Supabase
 
-QR tự đổi mỗi giờ và giữ mã giữa các lần mở admin, upload avatar/quà/PT, quên mật khẩu bằng mã email đã được bổ sung. Chạy migration 003, cấu hình Cron/email và deploy theo [UPDATES_003.md](../supabase/UPDATES_003.md).
+QR tự đổi mỗi giờ và giữ mã giữa các lần mở admin, upload avatar/quà/PT, quên mật khẩu bằng mã email đã được bổ sung. Giữ nguyên migration 003 và lịch QR. Sau 003, áp dụng migration 004 theo [WORKFLOWS.md](../supabase/WORKFLOWS.md): check-in cộng 5 GP tối đa một lần mỗi ngày Việt Nam; kích hoạt Basic/Premium/VIP cộng lần lượt 100/200/300 GP. Home gym chỉ được backfill khi có đúng một gym ID đang có QR còn hiệu lực; nếu không, để trống.
 
-**API nghiệp vụ đã bổ sung:** QR/check-in/check-out, occupancy/biểu đồ, đổi quà, đơn gói tập, lịch PT, lịch sử, sửa hồ sơ và quản trị danh mục. Đọc [WORKFLOWS.md](../supabase/WORKFLOWS.md) để chạy migration 002, deploy API mới và cấp quyền admin. Phần bên dưới mô tả thiết lập database ban đầu; không chạy lại migration 001 trên database đã được tạo.
+**API nghiệp vụ đã bổ sung:** QR/check-in/check-out, occupancy/biểu đồ, đổi quà, đơn gói tập, lịch PT, lịch sử, sửa hồ sơ và quản trị danh mục. Đọc [WORKFLOWS.md](../supabase/WORKFLOWS.md) để chạy migrations 002/004, deploy API mới và cấp quyền admin. Phần bên dưới mô tả thiết lập database ban đầu; không chạy lại migration 001 trên database đã được tạo.
 
 Để các thành viên chỉ cần Flutter, xem [API chung trên Supabase](../supabase/SHARED_API.md). Bản deploy dùng lại Express routes, được sinh thành một file để dán vào Dashboard. Backend local bên dưới vẫn phục vụ phát triển/test.
 
