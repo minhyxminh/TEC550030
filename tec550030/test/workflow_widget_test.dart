@@ -305,61 +305,85 @@ void main() {
     },
   );
 
-  testWidgets('admin can cancel membership after confirmation and preserves open session notice', (
-    tester,
-  ) async {
-    var cancelled = false;
-    Map<String, dynamic>? cancellationBody;
-    ApiClient.httpClient = mockApi((req) {
-      if (req.url.path == '/admin/dashboard') {
-        return jsonResponse({'orders': [], 'redemptions': [], 'qr_tokens': []});
-      }
-      if (req.url.path == '/admin/members') {
-        return jsonResponse(cancelled
-            ? []
-            : [
-                {
-                  'user_id': 'member-1',
-                  'name': 'Member One',
-                  'membership_name': 'Basic',
-                  'home_gym_id': 'gym-west',
-                  'membership_expires_at': '2099-01-01T00:00:00Z',
-                  'has_open_session': true,
-                },
-              ]);
-      }
-      if (req.url.path == '/admin/members/member-1/cancel-membership') {
-        cancellationBody = jsonDecode(req.body);
-        cancelled = true;
-        return jsonResponse({'user_id': 'member-1', 'has_open_session': true});
-      }
-      if (req.url.path == '/admin/qr-current') {
-        return jsonResponse({
-          'id': 'qr-1',
-          'gym_id': '1',
-          'token': 'AB12CD34EF',
-          'expires_at': DateTime.now().add(const Duration(minutes: 15)).toUtc().toIso8601String(),
-        });
-      }
-      return fixtureResponse(req);
-    });
+  testWidgets(
+    'admin cancellation explains branch reset and closes open sessions',
+    (tester) async {
+      var cancelled = false;
+      Map<String, dynamic>? cancellationBody;
+      ApiClient.httpClient = mockApi((req) {
+        if (req.url.path == '/admin/dashboard') {
+          return jsonResponse({
+            'orders': [],
+            'redemptions': [],
+            'qr_tokens': [],
+          });
+        }
+        if (req.url.path == '/admin/members') {
+          return jsonResponse(
+            cancelled
+                ? []
+                : [
+                    {
+                      'user_id': 'member-1',
+                      'name': 'Member One',
+                      'membership_name': 'Basic',
+                      'home_gym_id': 'gym-west',
+                      'membership_expires_at': '2099-01-01T00:00:00Z',
+                      'has_open_session': true,
+                    },
+                  ],
+          );
+        }
+        if (req.url.path == '/admin/members/member-1/cancel-membership') {
+          cancellationBody = jsonDecode(req.body);
+          cancelled = true;
+          return jsonResponse({
+            'user_id': 'member-1',
+            'has_open_session': true,
+          });
+        }
+        if (req.url.path == '/admin/qr-current') {
+          return jsonResponse({
+            'id': 'qr-1',
+            'gym_id': '1',
+            'token': 'AB12CD34EF',
+            'expires_at': DateTime.now()
+                .add(const Duration(minutes: 15))
+                .toUtc()
+                .toIso8601String(),
+          });
+        }
+        return fixtureResponse(req);
+      });
 
-    await page(tester, const AdminScreen());
-  await tester.drag(find.byType(ListView).first, const Offset(0, -600));
-  await tester.pumpAndSettle();
-    expect(find.text('Member One · Basic'), findsOneWidget);
-    expect(find.textContaining('phiên vẫn được giữ để check-out'), findsOneWidget);
-    final cancelButton = find.widgetWithText(AppButton, 'Hủy membership');
-    tester.widget<AppButton>(cancelButton).onPressed!.call();
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Lịch sử điểm và buổi tập sẽ được giữ.'), findsOneWidget);
-    await tester.tap(find.text('Xác nhận'));
-    await tester.pumpAndSettle();
-    expect(cancelled, isTrue);
-    expect(cancellationBody!['reason'], 'Hủy theo quyết định Admin.');
-    expect(find.text('Membership đã hủy. Buổi tập đang mở vẫn có thể check-out.'), findsOneWidget);
-    await tester.pumpWidget(const SizedBox());
-  });
+      await page(tester, const AdminScreen());
+      await tester.drag(find.byType(ListView).first, const Offset(0, -600));
+      await tester.pumpAndSettle();
+      expect(find.text('Member One · Basic'), findsOneWidget);
+      expect(
+        find.textContaining('hủy gói sẽ kết thúc buổi tập này'),
+        findsOneWidget,
+      );
+      final cancelButton = find.widgetWithText(AppButton, 'Hủy membership');
+      tester.widget<AppButton>(cancelButton).onPressed!.call();
+      await tester.pumpAndSettle();
+      expect(
+        find.textContaining('Lịch sử điểm và buổi tập vẫn được giữ.'),
+        findsOneWidget,
+      );
+      await tester.tap(find.text('Xác nhận'));
+      await tester.pumpAndSettle();
+      expect(cancelled, isTrue);
+      expect(cancellationBody!['reason'], 'Hủy theo quyết định Admin.');
+      expect(
+        find.text(
+          'Đã hủy membership. Hội viên có thể chọn lại cơ sở và đăng ký gói mới.',
+        ),
+        findsOneWidget,
+      );
+      await tester.pumpWidget(const SizedBox());
+    },
+  );
 
   testWidgets(
     'admin catalogue form submits validated fields and archives without deleting history',

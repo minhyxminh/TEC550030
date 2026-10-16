@@ -7,6 +7,8 @@ import '../../widgets/app_button.dart';
 import '../../widgets/app_input.dart';
 import '../../services/auth_service.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -21,7 +23,25 @@ class _LoginScreenState extends State<LoginScreen> {
   final _authService = AuthService();
 
   bool _isLoading = false;
+  bool _remember = true;
   String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _remember = prefs.getBool('remember_login') ?? true;
+      if (_emailController.text.isEmpty) {
+        _emailController.text = prefs.getString('remembered_email') ?? '';
+      }
+    });
+  }
 
   @override
   void dispose() {
@@ -38,7 +58,11 @@ class _LoginScreenState extends State<LoginScreen> {
       _errorMessage = null;
     });
     try {
-      await _authService.login(_emailController.text, _passwordController.text);
+      await _authService.login(
+        _emailController.text,
+        _passwordController.text,
+        remember: _remember,
+      );
       if (!mounted) return;
       Navigator.pushNamedAndRemoveUntil(
         context,
@@ -126,6 +150,18 @@ class _LoginScreenState extends State<LoginScreen> {
                       }
                       return null;
                     },
+                  ),
+                  CheckboxListTile(
+                    contentPadding: EdgeInsets.zero,
+                    controlAffinity: ListTileControlAffinity.leading,
+                    title: const Text('Ghi nhớ đăng nhập'),
+                    subtitle: const Text(
+                      'Bỏ chọn: đăng nhập lại khi mở ứng dụng sau khi đã đóng.',
+                    ),
+                    value: _remember,
+                    onChanged: _isLoading
+                        ? null
+                        : (value) => setState(() => _remember = value ?? false),
                   ),
                   Align(
                     alignment: Alignment.centerRight,

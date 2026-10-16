@@ -18,6 +18,7 @@ test('generated deployment exposes the same API under its function prefix with a
     return {
       auth: { getUser: async jwt => jwt === 'valid-token'
         ? { data: { user }, error: null } : { data: { user: null }, error: { message: 'Invalid' } } },
+      rpc: async name => ({ data: name === 'gymflow_my_profile' ? { id: user.id, name: 'Member' } : null, error: null }),
       from: () => ({ select: () => ({
         data: null, error: null,
         eq: () => ({ maybeSingle: async () => ({ data: { id: user.id, name: 'Member' }, error: null }) }),

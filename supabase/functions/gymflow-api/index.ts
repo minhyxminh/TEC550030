@@ -40,7 +40,7 @@ const businessErrors = {
   UNAUTHORIZED: [401, 'Cần đăng nhập.'], FORBIDDEN: [403, 'Chỉ quản trị viên được thực hiện thao tác này.'],
   NOT_FOUND: [404, 'Không tìm thấy dữ liệu.'], PROFILE_NOT_FOUND: [404, 'Chưa có hồ sơ người dùng.'],
   INVALID_INPUT: [400, 'Dữ liệu không hợp lệ.'], INVALID_QR: [400, 'QR không hợp lệ, đã hết hạn hoặc bị thu hồi.'],
-  GYM_REQUIRED: [403, 'Bạn cần được gán cơ sở trước khi check-in.'], WRONG_GYM: [403, 'QR này không thuộc cơ sở của bạn.'],
+  GYM_REQUIRED: [403, 'Bạn cần chọn cơ sở trước khi check-in.'], WRONG_GYM: [403, 'Buổi tập không khớp cơ sở đã chọn.'],
   GYM_NOT_FOUND: [404, 'Cơ sở không tồn tại hoặc đang ngừng hoạt động.'],
   OPEN_SESSION: [409, 'Hãy check-out trước khi đổi cơ sở tập.'],
   MEMBERSHIP_REQUIRED: [403, 'Bạn cần gói tập còn hạn để check-in.'],
@@ -217,6 +217,33 @@ export function createApp({ createSupabase, corsOrigins = [], trustProxy = false
   app.get('/points/balance', requireAuth, async (req, res) => {
     const balance = databaseResult(await req.supabase.rpc('get_my_point_balance'));
     res.json({ balance: Number(balance) });
+  });
+
+  app.post('/chat/open', requireAuth, async (req, res) => {
+    z.object({}).strict().parse(req.body ?? {});
+    res.json(await workflow(req.supabase, 'gymflow_chat', 'open'));
+  });
+  app.get('/chat/inbox', requireAuth, async (req, res) => {
+    res.json(await workflow(req.supabase, 'gymflow_chat', 'inbox', page.parse(req.query)));
+  });
+  app.get('/chat/:id/messages', requireAuth, async (req, res) => {
+    const input = z.object({ before: z.coerce.number().int().positive().optional(),
+      limit: z.coerce.number().int().min(1).max(100).default(50) }).strict().parse(req.query);
+    res.json(await workflow(req.supabase, 'gymflow_chat', 'messages', {
+      ...input, conversation_id: uuid.parse(req.params.id),
+    }));
+  });
+  app.post('/chat/:id/messages', requireAuth, async (req, res) => {
+    const input = z.object({ content: z.string().trim().min(1).max(2000), client_id: uuid }).strict().parse(req.body);
+    res.json(await workflow(req.supabase, 'gymflow_chat', 'send', {
+      ...input, conversation_id: uuid.parse(req.params.id),
+    }));
+  });
+  app.post('/chat/:id/read', requireAuth, async (req, res) => {
+    const input = z.object({ through: z.number().int().positive() }).strict().parse(req.body);
+    res.json(await workflow(req.supabase, 'gymflow_chat', 'read', {
+      ...input, conversation_id: uuid.parse(req.params.id),
+    }));
   });
 
   app.get('/points/history', requireAuth, async (req, res) => {

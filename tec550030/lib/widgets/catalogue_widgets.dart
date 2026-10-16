@@ -115,9 +115,11 @@ class PointBalanceCard extends StatelessWidget {
           children: [
             Icon(Icons.stars_rounded, color: AppColors.gymPointYellow),
             SizedBox(width: 8),
-            Text(
-              'GymPoint của bạn',
-              style: TextStyle(color: Colors.white, fontSize: 15),
+            Expanded(
+              child: Text(
+                'GymPoint của bạn',
+                style: TextStyle(color: Colors.white, fontSize: 15),
+              ),
             ),
           ],
         ),

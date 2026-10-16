@@ -1,6 +1,8 @@
 import '../core/api/api_client.dart';
 import '../models/user.dart';
 
+import 'package:shared_preferences/shared_preferences.dart';
+
 class RegistrationResult {
   final bool requiresEmailConfirmation;
   final String message;
@@ -8,12 +10,24 @@ class RegistrationResult {
 }
 
 class AuthService {
-  Future<User> login(String email, String password) async {
+  Future<User> login(
+    String email,
+    String password, {
+    bool remember = true,
+  }) async {
     final data = await ApiClient.postJson('/auth/login', {
       'email': email.trim().toLowerCase(),
       'password': password,
     }, authenticated: false);
-    await ApiClient.saveSession(data);
+    await ApiClient.saveSession(data, remember: remember);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('remember_login', remember);
+    await prefs.remove('biometric_enabled');
+    if (remember) {
+      await prefs.setString('remembered_email', email.trim().toLowerCase());
+    } else {
+      await prefs.remove('remembered_email');
+    }
     return User.fromJson(data['user'] as Map<String, dynamic>);
   }
 

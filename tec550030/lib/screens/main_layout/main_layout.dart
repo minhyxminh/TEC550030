@@ -2,7 +2,8 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../home/home_screen.dart';
-import '../gympoint/gympoint_screen.dart';
+import '../health/health_screen.dart';
+import '../chat/chat_entry_screen.dart';
 import '../rewards/rewards_screen.dart';
 import '../services/services_screen.dart';
 import '../profile/profile_screen.dart';
@@ -24,11 +25,19 @@ class _MainLayoutState extends State<MainLayout> {
     return Scaffold(
       body: [
         HomeScreen(onSelectTab: _selectTab),
-        const GymPointScreen(),
+        const HealthScreen(),
         const RewardsScreen(),
         const ServicesScreen(),
         ProfileScreen(onSelectTab: _selectTab),
       ][_currentIndex],
+      floatingActionButton: FloatingActionButton(
+        tooltip: 'Chat hỗ trợ',
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const ChatEntryScreen()),
+        ),
+        child: const Icon(Icons.chat_bubble_outline),
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: _selectTab,
@@ -42,9 +51,9 @@ class _MainLayoutState extends State<MainLayout> {
             label: 'Trang chủ',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.stars_outlined),
-            activeIcon: Icon(Icons.stars),
-            label: 'GymPoint',
+            icon: Icon(Icons.favorite_outline),
+            activeIcon: Icon(Icons.favorite),
+            label: 'Sức khỏe',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.card_giftcard_outlined),

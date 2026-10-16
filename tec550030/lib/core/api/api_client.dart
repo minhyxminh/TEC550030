@@ -28,13 +28,17 @@ class ApiClient {
   static Future<void>? _refreshing;
   static int _sessionVersion = 0;
   static int _accountVersion = 0;
+  static bool _remember = true;
+  static String? _memoryToken, _memoryRefresh;
 
-  static Future<String?> getToken() async =>
-      (await SharedPreferences.getInstance()).getString(_tokenKey);
+  static Future<String?> getToken() async => _remember
+      ? (await SharedPreferences.getInstance()).getString(_tokenKey)
+      : _memoryToken;
 
   static Future<void> saveSession(
     Map<String, dynamic> data, {
     bool renewing = false,
+    bool? remember,
   }) async {
     final token = data['access_token'] as String?;
     if (token == null || token.isEmpty) {
@@ -43,14 +47,23 @@ class ApiClient {
     if (!renewing) {
       _accountVersion++;
       _refreshing = null;
+      _remember = remember ?? true;
     }
     _sessionVersion++;
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_tokenKey, token);
+    if (!renewing) await prefs.remove('biometric_enabled');
     final refresh = data['refresh_token'] as String?;
-    if (refresh != null && refresh.isNotEmpty) {
-      await prefs.setString(_refreshKey, refresh);
+    _memoryToken = token;
+    _memoryRefresh = refresh;
+    if (_remember) {
+      await prefs.setString(_tokenKey, token);
+      if (refresh != null && refresh.isNotEmpty) {
+        await prefs.setString(_refreshKey, refresh);
+      } else {
+        await prefs.remove(_refreshKey);
+      }
     } else {
+      await prefs.remove(_tokenKey);
       await prefs.remove(_refreshKey);
     }
     sessionExpired.value = false;
@@ -60,9 +73,13 @@ class ApiClient {
     _sessionVersion++;
     _accountVersion++;
     _refreshing = null;
+    _memoryToken = null;
+    _memoryRefresh = null;
+    _remember = true;
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);
     await prefs.remove(_refreshKey);
+    await prefs.remove('biometric_enabled');
   }
 
   static Future<http.Response> _send(
@@ -121,7 +138,7 @@ class ApiClient {
   static Future<void> _refreshSession() async {
     final version = _sessionVersion;
     final prefs = await SharedPreferences.getInstance();
-    final refresh = prefs.getString(_refreshKey);
+    final refresh = _remember ? prefs.getString(_refreshKey) : _memoryRefresh;
     if (refresh == null) {
       await _expire(version);
       throw const ApiException(

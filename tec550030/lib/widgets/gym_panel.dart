@@ -6,6 +6,8 @@ import '../core/api/api_client.dart';
 import '../core/formatters.dart';
 import '../models/occupancy.dart';
 import '../models/user.dart';
+import '../services/branch_service.dart';
+import '../models/gym_branch.dart';
 import '../screens/home/qr_scanner_screen.dart';
 import 'app_button.dart';
 import 'app_card.dart';
@@ -14,11 +16,13 @@ import 'hourly_occupancy_chart.dart';
 
 class GymPanel extends StatefulWidget {
   final User user;
+  final BranchService branchService;
   final VoidCallback? onJoin;
   final VoidCallback? onChanged;
   const GymPanel({
     super.key,
     required this.user,
+    this.branchService = const BranchService(),
     this.onJoin,
     this.onChanged,
   });
@@ -37,11 +41,20 @@ class _GymPanelState extends State<GymPanel> {
   bool _choosing = false;
   int _generation = 0;
   Timer? _timer;
+  List<GymBranch> _branches = [];
+  String? get _branchName {
+    final id = _session?['gym_id'] as String? ?? widget.gymId;
+    for (final branch in _branches) {
+      if (branch.id == id) return branch.name;
+    }
+    return id == null ? null : 'Cơ sở $id';
+  }
+
   @override
   void didUpdateWidget(covariant GymPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.user.homeGymId != widget.user.homeGymId ||
-      oldWidget.user.hasActiveMembership != widget.user.hasActiveMembership) {
+        oldWidget.user.hasActiveMembership != widget.user.hasActiveMembership) {
       _load();
     }
   }
@@ -50,6 +63,7 @@ class _GymPanelState extends State<GymPanel> {
   void initState() {
     super.initState();
     _load();
+    _loadBranches();
     _timer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (!_busy) _load();
     });
@@ -59,6 +73,15 @@ class _GymPanelState extends State<GymPanel> {
   void dispose() {
     _timer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _loadBranches() async {
+    try {
+      final branches = await widget.branchService.getBranches();
+      if (mounted) setState(() => _branches = branches);
+    } catch (_) {
+      /* The attendance panel remains usable if the catalogue is unavailable. */
+    }
   }
 
   Future<void> _load() async {
@@ -73,12 +96,12 @@ class _GymPanelState extends State<GymPanel> {
       if (mounted && generation == _generation) {
         setState(() {
           _session = data[0];
-            _occupancy = widget.canCheckIn ? data[1]['count'] : null;
-            _hourly = !widget.canCheckIn
+          _occupancy = widget.canCheckIn ? data[1]['count'] : null;
+          _hourly = !widget.canCheckIn
               ? []
               : (data[2] as List<dynamic>)
-              .map((e) => HourlyOccupancy.fromJson(e))
-              .toList();
+                    .map((e) => HourlyOccupancy.fromJson(e))
+                    .toList();
           _error = null;
         });
       }
@@ -160,6 +183,13 @@ class _GymPanelState extends State<GymPanel> {
             ),
           ],
         ),
+        if (_branchName != null) ...[
+          Text(
+            _branchName!,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 10),
+        ],
         if (_occupancy != null)
           Text(
             '$_occupancy người đang tập',
@@ -169,10 +199,10 @@ class _GymPanelState extends State<GymPanel> {
         Text(
           _session == null
               ? widget.canCheckIn
-                    ? 'Quét QR tại cơ sở của bạn để bắt đầu buổi tập.'
-                  : widget.gymId == null
-                  ? 'Chọn cơ sở tập để tiếp tục.'
-                  : 'Chọn gói tập để bắt đầu check-in.'
+                    ? 'Quét QR tại ${_branchName ?? 'cơ sở đã chọn'} để bắt đầu buổi tập.'
+                    : widget.gymId == null
+                    ? 'Chọn cơ sở tập để tiếp tục.'
+                    : 'Chọn gói tập để bắt đầu check-in.'
               : 'Đang tập từ ${formatDateTime(DateTime.parse(_session!['check_in_at']))}',
         ),
         const SizedBox(height: 16),

@@ -28,10 +28,11 @@ test('workflows: authorization, atomic balances, idempotency, membership and PT 
   await db.query("update public.users set role='ADMIN' where id=$1", [admin]);
   await db.query("update public.users set active_membership_id=$2,membership_expires_at=now()+interval '30 days' where id=$1", [member, membership]);
   await db.query('insert into public.qr_tokens(gym_id,token_hash,expires_at) values($1,$2,now()+interval \'1 hour\')', [gymId, 'a'.repeat(64)]);
-  await db.exec(await readFile(new URL('../../supabase/migrations/004_phase1_stability.sql', import.meta.url), 'utf8'));
-  await db.exec(await readFile(new URL('../../supabase/migrations/005_phase1_home_gym_bridge.sql', import.meta.url), 'utf8'));
   // Updating an installed workflow migration must preserve all existing tables/data.
   await db.exec(await readFile(new URL('../../supabase/migrations/002_workflows.sql',import.meta.url),'utf8'));
+  // Reapply 002 before its forward replacements, so later authorization is preserved.
+  await db.exec(await readFile(new URL('../../supabase/migrations/004_phase1_stability.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../../supabase/migrations/005_phase1_home_gym_bridge.sql', import.meta.url), 'utf8'));
   await db.query("update public.users set home_gym_id='1' where id=$1", [member]);
   await db.query("update public.users set active_membership_id=$2,membership_expires_at=now()+interval '30 days',home_gym_id='1' where id=$1", [legacyMember, membership]);
   await db.query(`insert into public.membership_orders(user_id,membership_id,price_vnd_at_order,duration_days_at_order,status,approved_at,starts_at,ends_at,gym_id,idempotency_key)
@@ -44,6 +45,7 @@ test('workflows: authorization, atomic balances, idempotency, membership and PT 
   assert.equal((await db.query("select to_regprocedure('public.gymflow_assign_approval_gym()') as fn")).rows[0].fn, null);
   assert.equal(Number((await db.query('select count(*) as n from public.qr_tokens')).rows[0].n), qrCountBeforeCleanup);
   await db.exec(await readFile(new URL('../../supabase/migrations/007_phase2a_gym_branches.sql', import.meta.url), 'utf8'));
+  await db.exec(await readFile(new URL('../../supabase/migrations/008_global_qr_checkin.sql', import.meta.url), 'utf8'));
   await db.query('update public.users set home_gym_id=$2 where id in ($1,$3)', [member, gymId, cancelMember]);
   assert.equal((await db.query("select id from public.gyms where id='1'")).rows[0].id, '1');
   assert.match((await db.query('select description from public.memberships where id=$1', [membership])).rows[0].description, /5 GP.*100 GP khi kích hoạt/);
@@ -64,8 +66,9 @@ test('workflows: authorization, atomic balances, idempotency, membership and PT 
   const bridgeOrder = await call('membership_order', { membership_id: membership, idempotency_key: key() });
   await as(admin);
   const bridgeApproved = await call('admin_order', { id: bridgeOrder.id, status: 'APPROVED' });
-  assert.equal(bridgeApproved.gym_id, null);
-  assert.equal((await db.query('select home_gym_id from public.users where id=$1', [bridgeMember])).rows[0].home_gym_id, null);
+  assert.equal(bridgeApproved.gym_id, '1');
+  await as(bridgeMember);
+  assert.equal((await db.query('select home_gym_id from public.users where id=$1', [bridgeMember])).rows[0].home_gym_id, '1');
 
   await as(cancelMember);
   const cancellableOrder = await call('membership_order', { membership_id: membership, idempotency_key: key() });
@@ -114,6 +117,7 @@ test('workflows: authorization, atomic balances, idempotency, membership and PT 
   await as(admin);
   const ambiguousApproved = await call('admin_order', { id: ambiguousOrder.id, status: 'APPROVED' });
   assert.equal(ambiguousApproved.gym_id, null);
+  await as(ambiguousMember);
   assert.equal((await db.query('select home_gym_id from public.users where id=$1', [ambiguousMember])).rows[0].home_gym_id, null);
 
   await as(member);
@@ -135,7 +139,9 @@ test('workflows: authorization, atomic balances, idempotency, membership and PT 
   await assert.rejects(db.query("select public.gymflow_catalogue('rewards',$1,'{\"created_at\":\"2000-01-01\"}')", [added.id]), /INVALID_INPUT/);
   const approved = await call('admin_order', { id: order.id, status: 'APPROVED' });
   assert.equal((await call('admin_order', { id: order.id, status: 'APPROVED' })).ends_at, approved.ends_at);
+  await as(member);
   assert.equal((await db.query('select home_gym_id from public.users where id=$1', [member])).rows[0].home_gym_id, gymId);
+  await as(admin);
   assert.equal(Number((await db.query('select points_on_activation from public.memberships where id=$1', [membership])).rows[0].points_on_activation), 100);
   await assert.rejects(call('admin_order', { id: order.id, status: 'REJECTED' }), /ORDER_PROCESSED/);
   const tokenHash = 'b'.repeat(64);
@@ -156,7 +162,7 @@ test('workflows: authorization, atomic balances, idempotency, membership and PT 
   assert.equal((await call('check_in', { token_hash: tokenHash })).points_earned, 0);
   await call('check_out', { session_id: visit.session.id });
   await call('check_out', { session_id: visit.session.id });
-  assert.equal(Number((await db.query('select public.get_my_point_balance() as n')).rows[0].n), 110);
+  assert.equal(Number((await db.query('select public.get_my_point_balance() as n')).rows[0].n), 105);
   assert.equal((await call('occupancy', { gym_id: gymId }, true)).count, 0);
   await as(admin);
   await call('admin_qr', { gym_id: gymId, minutes: 15, token_hash: 'c'.repeat(64) });
@@ -168,17 +174,21 @@ test('workflows: authorization, atomic balances, idempotency, membership and PT 
   await assert.rejects(call('occupancy', { gym_id: '2' }, true), /FORBIDDEN/);
   await call('check_out', { session_id: reentry.session.id });
   assert.equal((await call('occupancy', { gym_id: gymId }, true)).count, 0);
-  await assert.rejects(call('check_in', { token_hash: 'd'.repeat(64) }), /WRONG_GYM/);
+  const globalVisit = await call('check_in', { token_hash: 'd'.repeat(64) });
+  assert.equal(globalVisit.session.gym_id, gymId);
+  assert.equal(globalVisit.points_earned, 0);
+  await call('check_out', { session_id: globalVisit.session.id });
   const hourly = await call('hourly',{gym_id:gymId},true);
-  // Re-entry in the same hour counts one member, not two sessions.
-  assert.equal(hourly.at(-1).count,1);
+  // The cancelled member's earlier visit plus this member's repeated visits:
+  // two distinct members, regardless of how often the second member re-enters.
+  assert.equal(hourly.at(-1).count,2);
   await db.exec('reset role');
   await db.query('update public.rewards set points=1000,stock=1 where id=$1', [reward]);
   await as(member);
   const redemptionPayload = { reward_id: reward, idempotency_key: key() };
   await assert.rejects(call('redeem', redemptionPayload), /INSUFFICIENT_POINTS/);
   assert.equal(Number((await db.query('select stock from public.rewards where id=$1', [reward])).rows[0].stock), 1);
-  assert.equal(Number((await db.query('select public.get_my_point_balance() as n')).rows[0].n), 110);
+  assert.equal(Number((await db.query('select public.get_my_point_balance() as n')).rows[0].n), 105);
   await db.exec('reset role');
   await db.query('update public.rewards set points=1,stock=1 where id=$1', [reward]);
   await as(member);
@@ -189,7 +199,7 @@ test('workflows: authorization, atomic balances, idempotency, membership and PT 
   assert.deepEqual(debit, { type: 'REDEEM', points: -1, redemption_id: redemption.id });
   assert.equal((await call('history', {}, true)).redemptions[0].id, redemption.id);
   await assert.rejects(call('redeem', { ...redemptionPayload, idempotency_key: key() }), /OUT_OF_STOCK/);
-  assert.equal(Number((await db.query('select public.get_my_point_balance() as n')).rows[0].n), 109);
+  assert.equal(Number((await db.query('select public.get_my_point_balance() as n')).rows[0].n), 104);
   await as(admin);
   await call('admin_fulfill', { id: redemption.id });
   await call('admin_revoke_qr', { id: qr.id });

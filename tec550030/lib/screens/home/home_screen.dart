@@ -104,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 24),
           PointBalanceCard(
             balance: data.account.balance,
-            onTap: () => onSelectTab?.call(1),
+            onTap: () => onSelectTab?.call(2),
           ),
           const SizedBox(height: 24),
           const SectionTitle('Gói tập của bạn'),
@@ -115,6 +115,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 24),
           GymPanel(
             user: data.account.user,
+            branchService: widget.branchService,
             onJoin: () => _join(data.account.user),
             onChanged: () => setState(() => _version++),
           ),

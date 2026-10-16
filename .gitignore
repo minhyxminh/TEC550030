@@ -33,3 +33,5 @@ google-services.json
 # Android Profiling
 *.hprof
 supabase/.temp/
+backend/.npm-cache/
+tec550030/android/.kotlin/

@@ -2,6 +2,8 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/navigation/app_routes.dart';
 import '../../services/auth_service.dart';
+import '../../services/biometric_service.dart';
+import '../../core/api/api_client.dart';
 import '../../widgets/error_state.dart';
 import '../../widgets/loading_view.dart';
 
@@ -23,7 +25,9 @@ class _SessionGateState extends State<SessionGate> {
     setState(() => _error = null);
     try {
       final auth = AuthService();
-      final loggedIn = await auth.isLoggedIn();
+      final loggedIn =
+          await auth.isLoggedIn() &&
+          await BiometricService().unlockSavedSession();
       if (loggedIn) await auth.getCurrentUser();
       if (!mounted) return;
       Navigator.pushNamedAndRemoveUntil(
@@ -32,6 +36,16 @@ class _SessionGateState extends State<SessionGate> {
         (_) => false,
       );
     } catch (error) {
+      if (error is ApiException && error.statusCode == 401) {
+        if (mounted) {
+          Navigator.pushNamedAndRemoveUntil(
+            context,
+            AppRoutes.login,
+            (_) => false,
+          );
+        }
+        return;
+      }
       if (mounted) setState(() => _error = error.toString());
     }
   }

@@ -15,6 +15,8 @@ import '../../widgets/user_avatar.dart';
 import 'activity_screen.dart';
 import 'admin_screen.dart';
 import 'edit_profile_screen.dart';
+import '../../widgets/biometric_setting.dart';
+import '../chat/chat_entry_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   final ValueChanged<int>? onSelectTab;
@@ -78,7 +80,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         const SizedBox(height: 24),
         PointBalanceCard(
           balance: account.balance,
-          onTap: () => onSelectTab?.call(1),
+          onTap: () => onSelectTab?.call(2),
         ),
         const SizedBox(height: 24),
         const SectionTitle('Gói tập của tôi'),
@@ -88,7 +90,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           icon: Icons.receipt_long_outlined,
           title: 'Lịch sử GymPoint',
           subtitle: 'Các lần cộng và sử dụng điểm',
-          onTap: () => onSelectTab?.call(1),
+          onTap: () => onSelectTab?.call(2),
         ),
         const SizedBox(height: 16),
         _ProfileLink(
@@ -117,6 +119,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ],
+        const SizedBox(height: 16),
+        const BiometricSetting(),
+        const SizedBox(height: 16),
+        _ProfileLink(
+          icon: Icons.chat_bubble_outline,
+          title: account.user.role == 'ADMIN'
+              ? 'Hộp thư hỗ trợ'
+              : 'Chat với GymFlow',
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ChatEntryScreen()),
+          ),
+        ),
         const SizedBox(height: 24),
         AppButton(
           text: 'Đăng xuất',

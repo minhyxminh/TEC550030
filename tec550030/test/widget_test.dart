@@ -122,11 +122,13 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField).at(0), 'anh@example.com');
     await tester.enterText(find.byType(TextFormField).at(1), 'password123');
+    await tester.ensureVisible(find.widgetWithText(AppButton, 'Đăng nhập'));
     await tester.tap(find.widgetWithText(AppButton, 'Đăng nhập'));
     await tester.pumpAndSettle();
     expect(find.text('Email/mật khẩu không hợp lệ.'), findsOneWidget);
     expect(find.byType(BottomNavigationBar), findsNothing);
     fail = false;
+    await tester.ensureVisible(find.widgetWithText(AppButton, 'Đăng nhập'));
     await tester.tap(find.widgetWithText(AppButton, 'Đăng nhập'));
     await tester.pumpAndSettle();
     expect(find.text('Lê Minh Anh'), findsOneWidget);
@@ -196,7 +198,8 @@ void main() {
       ),
     );
     expect(find.text('Tham gia'), findsOneWidget);
-    tester.widget<AppButton>(find.widgetWithText(AppButton, 'Tham gia'))
+    tester
+        .widget<AppButton>(find.widgetWithText(AppButton, 'Tham gia'))
         .onPressed!
         .call();
     await tester.pumpAndSettle();
@@ -213,6 +216,7 @@ void main() {
       await ApiClient.clearToken();
       await tester.pumpWidget(const MyApp());
       await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Đăng ký ngay'));
       await tester.tap(find.text('Đăng ký ngay'));
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextFormField).at(0), 'Lê Minh Anh');
@@ -377,6 +381,10 @@ void main() {
     });
     await showPage(tester, const GymPointScreen());
     await tester.scrollUntilVisible(find.text('Xem thêm giao dịch'), 500);
+    await tester.ensureVisible(
+      find.widgetWithText(AppButton, 'Xem thêm giao dịch'),
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Xem thêm giao dịch'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Giao dịch 20'), 300);

@@ -108,6 +108,29 @@ test('workflow business conflicts map to safe HTTP errors', async t => {
   }
 });
 
+test('chat endpoints require JWT, validate content and never accept a spoofed sender', async t => {
+  const api = await start(t);
+  const auth = { Authorization: 'Bearer valid-token', 'Content-Type': 'application/json' };
+  const conversation = crypto.randomUUID(), clientId = crypto.randomUUID();
+  const send = (body, headers = auth) => fetch(`${api.url}/chat/${conversation}/messages`, {
+    method: 'POST', headers, body: JSON.stringify(body),
+  });
+  assert.equal((await send({ content: 'Hello', client_id: clientId }, { 'Content-Type': 'application/json' })).status, 401);
+  for (const content of ['', '   ', 'x'.repeat(2001)]) {
+    assert.equal((await send({ content, client_id: clientId })).status, 400);
+  }
+  assert.equal((await send({ content: 'Hello', client_id: clientId, sender_id: memberId })).status, 400);
+  assert.equal((await send({ content: ' Hello ', client_id: clientId })).status, 200);
+  const call = api.calls.find(c => c.rpc === 'gymflow_chat');
+  assert.equal(call.token, 'valid-token');
+  assert.deepEqual(call.args, { action: 'send', payload: { conversation_id: conversation, client_id: clientId, content: 'Hello' } });
+  assert.equal((await fetch(`${api.url}/chat/${conversation}/messages?before=-1`, { headers: auth })).status, 400);
+  assert.equal((await fetch(`${api.url}/chat/${conversation}/messages?before=30`, { headers: auth })).status, 200);
+  assert.equal((await fetch(`${api.url}/chat/open`, { method: 'POST', headers: auth, body: '{}' })).status, 200);
+  const forbidden = await start(t, { rpcResult: () => ({ error: { message: 'FORBIDDEN' } }) });
+  assert.equal((await fetch(`${forbidden.url}/chat/inbox`, { headers: auth })).status, 403);
+});
+
 test('branch catalogue is public and home-gym selection is authenticated and RPC-backed', async t => {
   const api = await start(t, {
     rpcResult(name, args) {

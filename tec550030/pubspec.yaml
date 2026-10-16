@@ -44,6 +44,7 @@ dependencies:
 
   material_ui: any
   geolocator: ^14.1.1
+  local_auth: ^3.0.2
 dev_dependencies:
   flutter_test:
     sdk: flutter

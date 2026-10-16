@@ -37,7 +37,8 @@ class _AdminScreenState extends State<AdminScreen> {
           (data['redemptions'] as List).length == 20;
       if (!more) break;
     }
-    final members = await ApiClient.getJson('/admin/members?limit=100&offset=0') as List;
+    final members =
+        await ApiClient.getJson('/admin/members?limit=100&offset=0') as List;
     return {
       'orders': orders,
       'redemptions': redemptions,
@@ -83,15 +84,18 @@ class _AdminScreenState extends State<AdminScreen> {
                     '${member['name']} · ${member['membership_name'] ?? 'Membership'}',
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
-                  Text('Cơ sở ${member['home_gym_id'] ?? 'chưa gán'} · Hạn ${activityDate(member['membership_expires_at'])}'),
+                  Text(
+                    'Cơ sở ${member['home_gym_id'] ?? 'chưa gán'} · Hạn ${activityDate(member['membership_expires_at'])}',
+                  ),
                   if (member['has_open_session'] == true)
-                    const Text('Hội viên đang có buổi tập mở; phiên vẫn được giữ để check-out.'),
+                    const Text(
+                      'Hội viên đang có buổi tập mở; hủy gói sẽ kết thúc buổi tập này.',
+                    ),
                   const SizedBox(height: 12),
                   WorkflowButton(
                     text: 'Hủy membership',
-                    confirmation:
-                        'Hủy membership của hội viên này ngay? Lịch sử điểm và buổi tập sẽ được giữ.',
-                    success: 'Membership đã hủy. Buổi tập đang mở vẫn có thể check-out.',
+                    confirmation: 'Hủy membership, bỏ cơ sở đã chọn và kết thúc buổi tập đang mở? Lịch sử điểm và buổi tập vẫn được giữ.',
+                    success: 'Đã hủy membership. Hội viên có thể chọn lại cơ sở và đăng ký gói mới.',
                     action: () => ApiClient.postJson(
                       '/admin/members/${member['user_id']}/cancel-membership',
                       {'reason': 'Hủy theo quyết định Admin.'},
