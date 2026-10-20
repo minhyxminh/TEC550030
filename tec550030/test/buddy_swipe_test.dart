@@ -1,6 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:tec550030/core/theme/app_theme.dart';
+import 'package:tec550030/models/buddy_match.dart';
 import 'package:tec550030/models/buddy_profile.dart';
 import 'package:tec550030/screens/buddy/buddy_swipe_screen.dart';
 import 'package:tec550030/services/buddy_service.dart';
@@ -9,12 +10,14 @@ class FakeSwipeBuddyService extends BuddyService {
   final List<BuddyProfile> feed;
   final Object? feedError;
   final Map<String, Map<String, dynamic>> swipeResults;
+  final List<BuddyMatch> matches;
   final List<String> actions = [];
 
   FakeSwipeBuddyService({
     this.feed = const [],
     this.feedError,
     this.swipeResults = const {},
+    this.matches = const [],
   });
 
   @override
@@ -29,6 +32,10 @@ class FakeSwipeBuddyService extends BuddyService {
     return swipeResults['$action:$targetId'] ??
         <String, dynamic>{'matched': false, 'action': action};
   }
+
+  @override
+  Future<List<BuddyMatch>> getMatches() async =>
+      List<BuddyMatch>.from(matches);
 
   @override
   Future<BuddyProfile?> getProfile() async => null;
@@ -222,6 +229,49 @@ void main() {
     expect(find.text('Bạn và Lan cùng muốn kết nối.'), findsOneWidget);
     expect(find.text('Nhắn tin'), findsOneWidget);
     expect(find.text('Tiếp tục xem'), findsOneWidget);
+  });
+
+  testWidgets(
+      'continue after match keeps buddy reachable from matched chats',
+      (tester) async {
+    final service = FakeSwipeBuddyService(
+      feed: [candidate()],
+      swipeResults: const {
+        'LIKE:u2': {
+          'matched': true,
+          'action': 'LIKE',
+          'match_id': 'match-1',
+          'conversation_id': 'conv-1',
+          'is_new': true,
+        },
+      },
+      matches: const [
+        BuddyMatch(
+          id: 'match-1',
+          otherUserId: 'u2',
+          otherUserName: 'Lan',
+          conversationId: 'conv-1',
+        ),
+      ],
+    );
+    await pumpSwipe(tester, service: service);
+
+    await tester.tap(find.byTooltip('Kết nối'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Tiếp tục xem'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('Đã lưu match'),
+      findsOneWidget,
+    );
+
+    await tester.tap(find.byTooltip('Bạn tập đã kết nối'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bạn tập đã kết nối'), findsOneWidget);
+    expect(find.text('Lan'), findsOneWidget);
+    expect(find.byTooltip('Nhắn tin'), findsOneWidget);
   });
 
   testWidgets('filters can narrow candidates by goal', (tester) async {
