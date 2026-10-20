@@ -53,6 +53,10 @@ const businessErrors = {
   BOOKING_STARTED: [409, 'Buổi tập đã bắt đầu, không thể hủy.'], ORDER_PROCESSED: [409, 'Đơn này đã được xử lý.'],
   GYM_NOT_FOUND: [404, 'Cơ sở không tồn tại hoặc đang ngừng hoạt động.'],
   OPEN_SESSION: [409, 'Hãy check-out trước khi đổi cơ sở tập.'],
+  CANNOT_SWIPE_SELF: [400, 'Không thể tự kết nối với chính mình.'],
+  NOT_MATCHED: [409, 'Chỉ có thể thêm Gym Buddy đã match với bạn.'],
+  PAYMENT_REQUIRED: [409, 'Đơn thanh toán phải được xác nhận đã nhận tiền trước khi kích hoạt.'],
+  PAYMENT_NOT_CONFIGURED: [409, 'Gói tập này chưa được cấu hình số tiền thanh toán demo.'],
 };
 async function workflow(client, name, action, payload = {}) {
   const result = await client.rpc(name, { action, payload });
@@ -99,7 +103,53 @@ function sessionResponse(data) {
   };
 }
 
-export function createApp({ createSupabase, corsOrigins = [], trustProxy = false }) {
+function paymentResponse(order, paymentConfig = {}) {
+  const bankId = paymentConfig.bankId?.trim();
+  const accountNo = paymentConfig.accountNo?.trim();
+  const accountName = paymentConfig.accountName?.trim();
+  const ready = Boolean(bankId && accountNo && accountName);
+  const paymentCode = order?.payment_code ?? '';
+  const normalizedBank = bankId?.trim().toLowerCase();
+  const isVietinBank = ['vietinbank', 'icb', '970415'].includes(normalizedBank);
+  // VietinBank accounts linked through SePay need SEVQR in the transfer memo
+  // so incoming transactions are pushed reliably.
+  const description = isVietinBank
+    ? `SEVQR ${paymentCode}`
+    : paymentCode;
+  let qrUrl = null;
+  if (ready && order?.payment_amount_vnd && description) {
+    const params = new URLSearchParams({
+      amount: String(order.payment_amount_vnd),
+      addInfo: description,
+      accountName,
+    });
+    qrUrl = `https://img.vietqr.io/image/${encodeURIComponent(bankId)}-${encodeURIComponent(accountNo)}-compact.png?${params.toString()}`;
+  }
+  return {
+    ...order,
+    payment_ready: ready,
+    qr_url: qrUrl,
+    bank: ready ? {
+      bank_id: bankId,
+      account_no: accountNo,
+      account_name: accountName,
+    } : null,
+  };
+}
+
+function mapRpcError(result) {
+  const known = businessErrors[result.error?.message];
+  if (known) throw new ApiError(known[0], result.error.message, known[1]);
+  return databaseResult(result);
+}
+
+export function createApp({
+  createSupabase,
+  createServiceSupabase = null,
+  paymentConfig = {},
+  corsOrigins = [],
+  trustProxy = false,
+}) {
   const app = express();
   app.set('trust proxy', trustProxy);
   app.disable('x-powered-by');
@@ -246,6 +296,77 @@ export function createApp({ createSupabase, corsOrigins = [], trustProxy = false
     }));
   });
 
+  const buddyProfileSchema = z.object({
+    enabled: z.boolean().optional(),
+    age: z.number().int().min(16).max(100).nullable().optional(),
+    gender: z.string().trim().max(50).nullable().optional(),
+    show_age: z.boolean().optional(),
+    show_gender: z.boolean().optional(),
+    fitness_goal: z.string().trim().max(200).nullable().optional(),
+    experience_level: z.enum(['BEGINNER', 'INTERMEDIATE', 'ADVANCED']).nullable().optional(),
+    favorite_workouts: z.array(z.string().trim().max(100)).max(20).optional(),
+    preferred_workout_times: z.array(z.string().trim().max(100)).max(20).optional(),
+    workout_style: z.array(z.string().trim().max(100)).max(20).optional(),
+    bio: z.string().trim().max(1000).nullable().optional(),
+    onboarding_completed: z.boolean().optional(),
+    looking_for_partner: z.boolean().optional(),
+    partner_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    partner_start_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).nullable().optional(),
+    partner_end_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).nullable().optional(),
+    partner_workout: z.string().trim().max(200).nullable().optional(),
+    partner_gym_id: z.string().trim().max(100).nullable().optional(),
+    partner_note: z.string().trim().max(1000).nullable().optional(),
+  }).strict();
+
+  app.get('/buddy/profile', requireAuth, async (req, res) => {
+    const profile = await workflow(req.supabase, 'gymflow_buddy', 'PROFILE_GET');
+    if (!profile) return res.json(null);
+    const avatar = profile.avatar_path ? req.supabase.storage.from('gymflow-images').getPublicUrl(profile.avatar_path).data.publicUrl : null;
+    res.json({ ...profile, avatar_url: avatar });
+  });
+
+  app.post('/buddy/profile', requireAuth, async (req, res) => {
+    const payload = buddyProfileSchema.parse(req.body);
+    const profile = await workflow(req.supabase, 'gymflow_buddy', 'PROFILE_UPSERT', payload);
+    const avatar = profile?.avatar_path ? req.supabase.storage.from('gymflow-images').getPublicUrl(profile.avatar_path).data.publicUrl : null;
+    res.json({ ...profile, avatar_url: avatar });
+  });
+
+  app.get('/buddy/feed', requireAuth, async (req, res) => {
+    const query = z.object({ limit: z.coerce.number().int().min(1).max(100).default(20) }).strict().parse(req.query);
+    const feed = await workflow(req.supabase, 'gymflow_buddy', 'FEED', query);
+    const candidates = (feed?.candidates || []).map(c => ({
+      ...c,
+      avatar_url: c.avatar_path ? req.supabase.storage.from('gymflow-images').getPublicUrl(c.avatar_path).data.publicUrl : null,
+    }));
+    res.json({ candidates });
+  });
+
+  app.post('/buddy/swipe', requireAuth, async (req, res) => {
+    const payload = z.object({
+      target_id: uuid,
+      action: z.enum(['LIKE', 'PASS']),
+    }).strict().parse(req.body);
+    res.json(await workflow(req.supabase, 'gymflow_buddy', 'SWIPE', payload));
+  });
+
+  app.get('/buddy/matches', requireAuth, async (req, res) => {
+    const data = await workflow(req.supabase, 'gymflow_buddy', 'MATCHES');
+    const matches = (data?.matches || []).map(m => ({
+      ...m,
+      other_avatar_url: m.other_avatar_path ? req.supabase.storage.from('gymflow-images').getPublicUrl(m.other_avatar_path).data.publicUrl : null,
+    }));
+    res.json({ matches });
+  });
+
+  app.post('/buddy/groups', requireAuth, async (req, res) => {
+    const payload = z.object({
+      title: z.string().trim().min(1).max(80),
+      member_ids: z.array(uuid).min(2).max(20),
+    }).strict().parse(req.body);
+    res.status(201).json(await workflow(req.supabase, 'gymflow_buddy', 'GROUP_CREATE', payload));
+  });
+
   app.get('/points/history', requireAuth, async (req, res) => {
     const { limit, offset } = page.parse(req.query);
     res.json(databaseResult(await req.supabase.from('point_transactions')
@@ -319,7 +440,86 @@ export function createApp({ createSupabase, corsOrigins = [], trustProxy = false
     res.json(await workflow(req.supabase, 'gymflow_read', 'hourly', { ...input, gym_id: gymId.parse(req.params.gym_id) }));
   });
   app.post('/redemptions', requireAuth, command('redeem', z.object({ reward_id: uuid, idempotency_key: requestKey }).strict()));
+  // Legacy manual-approval order route remains for backwards compatibility.
   app.post('/membership-orders', requireAuth, command('membership_order', z.object({ membership_id: uuid, idempotency_key: requestKey }).strict()));
+
+  app.post('/payments/membership-orders', requireAuth, async (req, res) => {
+    const input = z.object({
+      membership_id: uuid,
+      idempotency_key: requestKey,
+    }).strict().parse(req.body);
+    const result = await req.supabase.rpc('gymflow_create_membership_payment', {
+      membership_id_input: input.membership_id,
+      idempotency_key_input: input.idempotency_key,
+    });
+    res.status(201).json(paymentResponse(mapRpcError(result), paymentConfig));
+  });
+
+  app.get('/payments/membership-orders/:id', requireAuth, async (req, res) => {
+    const result = await req.supabase.rpc('gymflow_get_membership_payment', {
+      order_id_input: uuid.parse(req.params.id),
+    });
+    res.json(paymentResponse(mapRpcError(result), paymentConfig));
+  });
+
+  // SePay calls this public endpoint after a bank transaction. The secret is
+  // configured in SePay + Supabase secrets and is never exposed to Flutter.
+  app.post('/webhooks/sepay', async (req, res) => {
+    const expectedKey = paymentConfig.sepayApiKey;
+    if (!expectedKey || !createServiceSupabase) {
+      throw new ApiError(503, 'PAYMENT_NOT_CONFIGURED', 'Webhook thanh toán chưa được cấu hình.');
+    }
+    if (req.headers.authorization !== `Apikey ${expectedKey}`) {
+      throw new ApiError(401, 'UNAUTHORIZED', 'Webhook không hợp lệ.');
+    }
+
+    const input = z.object({
+      id: z.union([z.number().int(), z.string().min(1).max(100)]),
+      gateway: z.string().max(100).optional(),
+      transactionDate: z.string().max(50).optional(),
+      accountNumber: z.string().max(100).optional(),
+      code: z.string().max(100).nullable().optional(),
+      content: z.string().max(1000).default(''),
+      transferType: z.string().max(20),
+      transferAmount: z.coerce.number().int().positive(),
+      referenceCode: z.string().max(200).nullable().optional(),
+    }).passthrough().parse(req.body);
+
+    if (input.transferType.toLowerCase() !== 'in') {
+      return res.json({ success: true, ignored: true, reason: 'NOT_INCOMING' });
+    }
+
+    const codeCandidate = input.code?.trim().toUpperCase();
+    const contentMatch = input.content.toUpperCase().match(/GF[A-Z0-9]{12}/);
+    const paymentCode = codeCandidate?.match(/^GF[A-Z0-9]{12}$/)?.[0]
+      ?? contentMatch?.[0]
+      ?? null;
+    if (!paymentCode) {
+      return res.json({ success: true, ignored: true, reason: 'NO_PAYMENT_CODE' });
+    }
+
+    let transactionAt = null;
+    if (input.transactionDate) {
+      const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(input.transactionDate)
+        ? input.transactionDate.replace(' ', 'T') + '+07:00'
+        : input.transactionDate;
+      if (!Number.isNaN(Date.parse(normalized))) transactionAt = normalized;
+    }
+
+    const service = createServiceSupabase();
+    const result = await service.rpc('gymflow_confirm_membership_payment', {
+      payment_code_input: paymentCode,
+      provider_transaction_id_input: String(input.id),
+      transfer_amount_input: input.transferAmount,
+      transfer_content_input: input.content,
+      provider_transaction_at_input: transactionAt,
+    });
+    mapRpcError(result);
+    // SePay treats the webhook as delivered only when the response body is
+    // exactly {"success":true} with HTTP 200/201.
+    res.json({ success: true });
+  });
+
   app.get('/trainers/:id/slots', requireAuth, async (req, res) => {
     const input = z.object({ date: dateString }).strict().parse(req.query);
     res.json(await workflow(req.supabase, 'gymflow_read', 'pt_slots', { ...input, trainer_id: uuid.parse(req.params.id) }));
@@ -452,10 +652,19 @@ if (typeof Deno !== 'undefined') {
   const url = Deno.env.get('SUPABASE_URL');
   const namedKeys = JSON.parse(Deno.env.get('SUPABASE_PUBLISHABLE_KEYS') || '{}');
   const key = Deno.env.get('SUPABASE_PUBLISHABLE_KEY') || namedKeys.default || Deno.env.get('SUPABASE_ANON_KEY');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) throw new Error('Missing Supabase URL or publishable/anon key.');
-  // Use only an unprivileged key: RLS applies to every private user request.
   const gateway = createEdgeApp({
     createSupabase: makeClientFactory({ SUPABASE_URL: url, SUPABASE_PUBLISHABLE_KEY: key }),
+    createServiceSupabase: serviceKey
+      ? makeClientFactory({ SUPABASE_URL: url, SUPABASE_PUBLISHABLE_KEY: serviceKey })
+      : null,
+    paymentConfig: {
+      bankId: Deno.env.get('PAYMENT_BANK_ID'),
+      accountNo: Deno.env.get('PAYMENT_ACCOUNT_NO'),
+      accountName: Deno.env.get('PAYMENT_ACCOUNT_NAME'),
+      sepayApiKey: Deno.env.get('SEPAY_API_KEY'),
+    },
     corsOrigins: '*',
     trustProxy: 1,
   });

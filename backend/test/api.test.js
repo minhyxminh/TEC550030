@@ -131,6 +131,70 @@ test('chat endpoints require JWT, validate content and never accept a spoofed se
   assert.equal((await fetch(`${forbidden.url}/chat/inbox`, { headers: auth })).status, 403);
 });
 
+test('buddy group endpoint requires auth, validates members, and maps unmatched buddies to conflict', async t => {
+  const memberB = 'a0000000-0000-4000-8000-000000000002';
+  const memberC = 'a0000000-0000-4000-8000-000000000003';
+  const api = await start(t, {
+    rpcResult(name, args) {
+      if (name === 'gymflow_buddy' && args.action === 'GROUP_CREATE') {
+        return {
+          data: {
+            id: 'b0000000-0000-4000-8000-000000000001',
+            conversation_id: 'b0000000-0000-4000-8000-000000000001',
+            type: 'GROUP',
+            title: args.payload.title,
+            member_count: 3,
+          },
+          error: null,
+        };
+      }
+      return { data: null, error: null };
+    },
+  });
+  const auth = { Authorization: 'Bearer valid-token', 'Content-Type': 'application/json' };
+  const body = { title: 'Leg Day Team', member_ids: [memberB, memberC] };
+
+  assert.equal((await fetch(`${api.url}/buddy/groups`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })).status, 401);
+
+  assert.equal((await fetch(`${api.url}/buddy/groups`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ title: 'Leg Day Team', member_ids: [memberB] }),
+  })).status, 400);
+
+  assert.equal((await fetch(`${api.url}/buddy/groups`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ ...body, created_by: memberId }),
+  })).status, 400);
+
+  const created = await fetch(`${api.url}/buddy/groups`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify(body),
+  });
+  assert.equal(created.status, 201);
+  assert.equal((await created.json()).type, 'GROUP');
+  const rpc = api.calls.find(c => c.rpc === 'gymflow_buddy' && c.args?.action === 'GROUP_CREATE');
+  assert.equal(rpc.token, 'valid-token');
+  assert.deepEqual(rpc.args.payload, body);
+
+  const denied = await start(t, {
+    rpcResult: () => ({ data: null, error: { code: 'P0001', message: 'NOT_MATCHED' } }),
+  });
+  const conflict = await fetch(`${denied.url}/buddy/groups`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify(body),
+  });
+  assert.equal(conflict.status, 409);
+  assert.equal((await conflict.json()).code, 'NOT_MATCHED');
+});
+
 test('branch catalogue is public and home-gym selection is authenticated and RPC-backed', async t => {
   const api = await start(t, {
     rpcResult(name, args) {

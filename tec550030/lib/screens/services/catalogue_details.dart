@@ -6,7 +6,7 @@ import '../../core/theme/app_text_styles.dart';
 import '../../models/membership.dart';
 import '../../models/trainer.dart';
 import '../../services/catalogue_service.dart';
-import '../../widgets/workflow_button.dart';
+import 'membership_payment_screen.dart';
 import 'pt_booking_screen.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/catalogue_widgets.dart';
@@ -34,17 +34,21 @@ class MembershipDetailScreen extends StatelessWidget {
         const SizedBox(height: 24),
         const AppCard(
           child: Text(
-            'Gửi đơn đăng ký và thanh toán tại quầy. Gói tập có hiệu lực sau khi quản trị viên duyệt; thời gian còn lại của gói hiện tại được cộng tiếp.',
+            'Thanh toán bằng QR chuyển khoản. Khi hệ thống nhận được giao dịch đúng số tiền và mã đơn, gói sẽ được kích hoạt tự động và GymPoint được cộng ngay.',
           ),
         ),
         const SizedBox(height: 16),
-        RequestButton(
-          path: '/membership-orders',
-          body: {'membership_id': membership.id},
-          text: 'Đăng ký gói tập',
-          confirmation:
-              'Đăng ký ${membership.name} với giá ${formatPrice(membership.priceVnd)}?',
-          success: 'Đã gửi đơn. Vui lòng thanh toán tại quầy.',
+        FilledButton.icon(
+          onPressed: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => MembershipPaymentScreen(
+                membership: membership,
+              ),
+            ),
+          ),
+          icon: const Icon(Icons.qr_code_2_rounded),
+          label: const Text('Thanh toán và kích hoạt gói'),
         ),
       ],
     ),
