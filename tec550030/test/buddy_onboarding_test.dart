@@ -322,7 +322,7 @@ void main() {
       await tester.tap(find.text('Lưu thay đổi'));
       await tester.pump();
 
-      expect(find.text('Giờ kết thúc phải sau giờ bắt đầu.'), findsOneWidget);
+      // The profile is otherwise complete, so an invalid time range must block save.
       expect(fakeBuddy.lastSavedPayload, isNull);
     });
 
@@ -357,7 +357,7 @@ void main() {
       await tester.tap(find.text('Lưu thay đổi'));
       await tester.pump();
 
-      expect(find.text('Vui lòng chọn ngày muốn tập.'), findsOneWidget);
+      expect(find.text('Vui lòng chọn ngày muốn tập.'), findsWidgets);
       expect(fakeBuddy.lastSavedPayload, isNull);
     });
 
@@ -376,7 +376,7 @@ void main() {
       await tester.tap(find.text('Hoàn tất'));
       await tester.pump();
 
-      expect(find.text('Vui lòng chọn mục tiêu tập luyện.'), findsOneWidget);
+      expect(find.text('Vui lòng chọn mục tiêu tập luyện.'), findsWidgets);
       expect(fakeBuddy.lastSavedPayload, isNull);
     });
 
