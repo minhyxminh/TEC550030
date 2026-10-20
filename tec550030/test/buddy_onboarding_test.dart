@@ -320,7 +320,7 @@ void main() {
 
       await scrollTo(tester, find.text('Lưu thay đổi'));
       await tester.tap(find.text('Lưu thay đổi'));
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       expect(find.text('Giờ kết thúc phải sau giờ bắt đầu.'), findsOneWidget);
       expect(fakeBuddy.lastSavedPayload, isNull);
@@ -355,7 +355,7 @@ void main() {
 
       await scrollTo(tester, find.text('Lưu thay đổi'));
       await tester.tap(find.text('Lưu thay đổi'));
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       expect(find.text('Vui lòng chọn ngày muốn tập.'), findsOneWidget);
       expect(fakeBuddy.lastSavedPayload, isNull);
@@ -374,7 +374,7 @@ void main() {
       // Tap Hoàn tất without selecting anything
       await scrollTo(tester, find.text('Hoàn tất'));
       await tester.tap(find.text('Hoàn tất'));
-      await tester.pumpAndSettle();
+      await tester.pump();
 
       expect(find.text('Vui lòng chọn mục tiêu tập luyện.'), findsOneWidget);
       expect(fakeBuddy.lastSavedPayload, isNull);
