@@ -30,10 +30,21 @@ if (typeof Deno !== 'undefined') {
   const url = Deno.env.get('SUPABASE_URL');
   const namedKeys = JSON.parse(Deno.env.get('SUPABASE_PUBLISHABLE_KEYS') || '{}');
   const key = Deno.env.get('SUPABASE_PUBLISHABLE_KEY') || namedKeys.default || Deno.env.get('SUPABASE_ANON_KEY');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) throw new Error('Missing Supabase URL or publishable/anon key.');
-  // Use only an unprivileged key: RLS applies to every private user request.
   const gateway = createEdgeApp({
+    // User routes stay on the unprivileged key + JWT/RLS.
     createSupabase: makeClientFactory({ SUPABASE_URL: url, SUPABASE_PUBLISHABLE_KEY: key }),
+    // Trusted webhook settlement is isolated to the payment endpoint.
+    createServiceSupabase: serviceKey
+      ? makeClientFactory({ SUPABASE_URL: url, SUPABASE_PUBLISHABLE_KEY: serviceKey })
+      : null,
+    paymentConfig: {
+      bankId: Deno.env.get('PAYMENT_BANK_ID'),
+      accountNo: Deno.env.get('PAYMENT_ACCOUNT_NO'),
+      accountName: Deno.env.get('PAYMENT_ACCOUNT_NAME'),
+      sepayApiKey: Deno.env.get('SEPAY_API_KEY'),
+    },
     corsOrigins: '*',
     trustProxy: 1,
   });
