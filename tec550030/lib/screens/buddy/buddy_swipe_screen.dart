@@ -10,7 +10,7 @@ import '../../services/buddy_service.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/catalogue_widgets.dart';
 import '../chat/conversation_screen.dart';
-import 'buddy_group_create_screen.dart';
+import 'buddy_matches_screen.dart';
 import 'buddy_onboarding_screen.dart';
 
 class BuddySwipeScreen extends StatefulWidget {
@@ -437,6 +437,14 @@ class _BuddySwipeScreenState extends State<BuddySwipeScreen> {
           ),
         ),
       );
+    } else if (openChat == false && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Đã lưu match. Mở “Bạn tập đã kết nối” để nhắn tin bất cứ lúc nào.',
+          ),
+        ),
+      );
     }
   }
 
@@ -447,19 +455,19 @@ class _BuddySwipeScreenState extends State<BuddySwipeScreen> {
         title: const Text('Kết nối bạn tập'),
         actions: [
           IconButton(
-            tooltip: 'Tạo nhóm bạn tập',
+            tooltip: 'Bạn tập đã kết nối',
             onPressed: _submitting
                 ? null
                 : () => Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => BuddyGroupCreateScreen(
+                      builder: (_) => BuddyMatchesScreen(
                         profile: _ownProfile,
                         buddyService: widget.buddyService,
                       ),
                     ),
                   ),
-            icon: const Icon(Icons.groups_outlined),
+            icon: const Icon(Icons.chat_bubble_outline),
           ),
           IconButton(
             tooltip: 'Bộ lọc',
