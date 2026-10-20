@@ -9,6 +9,7 @@ import '../../services/branch_service.dart';
 import '../../services/buddy_service.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/catalogue_widgets.dart';
+import '../chat/conversation_screen.dart';
 import 'buddy_onboarding_screen.dart';
 
 class BuddySwipeScreen extends StatefulWidget {
@@ -29,12 +30,17 @@ class BuddySwipeScreen extends StatefulWidget {
 
 class _BuddySwipeScreenState extends State<BuddySwipeScreen> {
   late BuddyProfile _ownProfile;
-  List<BuddyProfile> _candidates = const [];
+  List<BuddyProfile> _remainingCandidates = const [];
   bool _loading = true;
   bool _submitting = false;
   bool _showBack = false;
   String? _error;
   double _dragX = 0;
+
+  String? _filterGymId;
+  String? _filterGoal;
+  String? _filterWorkout;
+  String? _filterTime;
 
   static const double _swipeThreshold = 90;
 
@@ -57,7 +63,7 @@ class _BuddySwipeScreenState extends State<BuddySwipeScreen> {
       final candidates = await widget.buddyService.getFeed(limit: 20);
       if (!mounted) return;
       setState(() {
-        _candidates = candidates;
+        _remainingCandidates = candidates;
         _loading = false;
         _showBack = false;
         _dragX = 0;
@@ -71,8 +77,209 @@ class _BuddySwipeScreenState extends State<BuddySwipeScreen> {
     }
   }
 
-  BuddyProfile? get _current =>
-      _candidates.isEmpty ? null : _candidates.first;
+  bool get _hasActiveFilters =>
+      _filterGymId != null ||
+      _filterGoal != null ||
+      _filterWorkout != null ||
+      _filterTime != null;
+
+  List<BuddyProfile> get _filteredCandidates => _remainingCandidates.where((p) {
+        if (_filterGymId != null && p.homeGymId != _filterGymId) return false;
+        if (_filterGoal != null && p.fitnessGoal != _filterGoal) return false;
+        if (_filterWorkout != null &&
+            !p.favoriteWorkouts.contains(_filterWorkout)) {
+          return false;
+        }
+        if (_filterTime != null &&
+            !p.preferredWorkoutTimes.contains(_filterTime)) {
+          return false;
+        }
+        return true;
+      }).toList(growable: false);
+
+  BuddyProfile? get _current {
+    final filtered = _filteredCandidates;
+    return filtered.isEmpty ? null : filtered.first;
+  }
+
+  void _clearFilters() {
+    setState(() {
+      _filterGymId = null;
+      _filterGoal = null;
+      _filterWorkout = null;
+      _filterTime = null;
+      _showBack = false;
+      _dragX = 0;
+    });
+  }
+
+  Future<void> _showFilters() async {
+    String? gymId = _filterGymId;
+    String? goal = _filterGoal;
+    String? workout = _filterWorkout;
+    String? time = _filterTime;
+
+    final gymLabels = <String, String>{};
+    for (final p in _remainingCandidates) {
+      if (p.homeGymId != null) {
+        gymLabels[p.homeGymId!] = [
+          if (p.gymName != null && p.gymName!.isNotEmpty) p.gymName!,
+          if (p.district != null && p.district!.isNotEmpty) p.district!,
+        ].join(' · ');
+      }
+    }
+
+    final goals = _remainingCandidates
+        .map((p) => p.fitnessGoal)
+        .whereType<String>()
+        .toSet()
+        .toList()
+      ..sort();
+    final workouts = _remainingCandidates
+        .expand((p) => p.favoriteWorkouts)
+        .toSet()
+        .toList()
+      ..sort();
+    final times = _remainingCandidates
+        .expand((p) => p.preferredWorkoutTimes)
+        .toSet()
+        .toList()
+      ..sort();
+
+    final apply = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          Widget choiceRow({
+            required String title,
+            required List<MapEntry<String, String>> options,
+            required String? selected,
+            required ValueChanged<String?> onSelected,
+          }) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: AppTextStyles.heading2),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    ChoiceChip(
+                      label: const Text('Tất cả'),
+                      selected: selected == null,
+                      onSelected: (_) => onSelected(null),
+                    ),
+                    ...options.map(
+                      (option) => ChoiceChip(
+                        label: Text(option.value),
+                        selected: selected == option.key,
+                        onSelected: (_) => onSelected(option.key),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            );
+          }
+
+          return SafeArea(
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                20,
+                20,
+                20 + MediaQuery.viewInsetsOf(context).bottom,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Expanded(
+                        child: Text('Bộ lọc bạn tập', style: AppTextStyles.heading1),
+                      ),
+                      TextButton(
+                        onPressed: () => setSheetState(() {
+                          gymId = null;
+                          goal = null;
+                          workout = null;
+                          time = null;
+                        }),
+                        child: const Text('Xóa lọc'),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 20),
+                  choiceRow(
+                    title: 'Chi nhánh',
+                    options: gymLabels.entries
+                        .map(
+                          (e) => MapEntry(
+                            e.key,
+                            e.value.isEmpty ? 'Chi nhánh GymFlow' : e.value,
+                          ),
+                        )
+                        .toList(),
+                    selected: gymId,
+                    onSelected: (value) => setSheetState(() => gymId = value),
+                  ),
+                  const SizedBox(height: 22),
+                  choiceRow(
+                    title: 'Mục tiêu',
+                    options: goals
+                        .map((value) => MapEntry(value, _goalLabel(value)))
+                        .toList(),
+                    selected: goal,
+                    onSelected: (value) => setSheetState(() => goal = value),
+                  ),
+                  const SizedBox(height: 22),
+                  choiceRow(
+                    title: 'Bài tập',
+                    options: workouts
+                        .map((value) => MapEntry(value, value))
+                        .toList(),
+                    selected: workout,
+                    onSelected: (value) =>
+                        setSheetState(() => workout = value),
+                  ),
+                  const SizedBox(height: 22),
+                  choiceRow(
+                    title: 'Khung giờ',
+                    options: times
+                        .map((value) => MapEntry(value, _timeLabel(value)))
+                        .toList(),
+                    selected: time,
+                    onSelected: (value) => setSheetState(() => time = value),
+                  ),
+                  const SizedBox(height: 28),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton(
+                      onPressed: () => Navigator.pop(sheetContext, true),
+                      child: const Text('Áp dụng'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+
+    if (apply == true && mounted) {
+      setState(() {
+        _filterGymId = gymId;
+        _filterGoal = goal;
+        _filterWorkout = workout;
+        _filterTime = time;
+        _showBack = false;
+        _dragX = 0;
+      });
+    }
+  }
 
   Future<void> _editProfile() async {
     final changed = await Navigator.push<bool>(
@@ -128,16 +335,16 @@ class _BuddySwipeScreenState extends State<BuddySwipeScreen> {
 
       final matched = result['matched'] == true;
       setState(() {
-        _candidates = _candidates.skip(1).toList(growable: false);
+        _remainingCandidates = _remainingCandidates
+            .where((p) => p.userId != candidate.userId)
+            .toList(growable: false);
         _submitting = false;
         _showBack = false;
         _dragX = 0;
       });
 
       if (matched) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Hai bạn đã kết nối!')),
-        );
+        await _showMatchDialog(candidate, result);
       }
     } catch (e) {
       if (!mounted) return;
@@ -151,6 +358,81 @@ class _BuddySwipeScreenState extends State<BuddySwipeScreen> {
     }
   }
 
+  Future<void> _showMatchDialog(
+    BuddyProfile candidate,
+    Map<String, dynamic> result,
+  ) async {
+    final conversationId = result['conversation_id'] as String?;
+    final openChat = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.handshake_outlined, color: AppColors.success),
+            SizedBox(width: 10),
+            Text('Gym Match!'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircleAvatar(
+              radius: 38,
+              backgroundColor:
+                  AppColors.primaryOrange.withValues(alpha: 0.10),
+              child: const Icon(
+                Icons.people_alt_outlined,
+                size: 36,
+                color: AppColors.primaryOrange,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Bạn và ${candidate.name} cùng muốn kết nối.',
+              style: AppTextStyles.body,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Gửi lời chào và lên lịch buổi tập đầu tiên nhé.',
+              style: AppTextStyles.caption,
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Tiếp tục xem'),
+          ),
+          FilledButton.icon(
+            onPressed: conversationId == null || conversationId.isEmpty
+                ? null
+                : () => Navigator.pop(dialogContext, true),
+            icon: const Icon(Icons.chat_bubble_outline),
+            label: const Text('Nhắn tin'),
+          ),
+        ],
+      ),
+    );
+
+    if (openChat == true &&
+        mounted &&
+        conversationId != null &&
+        conversationId.isNotEmpty) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ConversationScreen(
+            conversationId: conversationId,
+            userId: _ownProfile.userId,
+            title: candidate.name,
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -158,9 +440,17 @@ class _BuddySwipeScreenState extends State<BuddySwipeScreen> {
         title: const Text('Kết nối bạn tập'),
         actions: [
           IconButton(
+            tooltip: 'Bộ lọc',
+            onPressed: _submitting ? null : _showFilters,
+            icon: Badge(
+              isLabelVisible: _hasActiveFilters,
+              child: const Icon(Icons.filter_list_rounded),
+            ),
+          ),
+          IconButton(
             tooltip: 'Chỉnh sửa sở thích',
             onPressed: _submitting ? null : _editProfile,
-            icon: const Icon(Icons.tune_rounded),
+            icon: const Icon(Icons.edit_outlined),
           ),
         ],
       ),
@@ -213,6 +503,8 @@ class _BuddySwipeScreenState extends State<BuddySwipeScreen> {
 
     final candidate = _current;
     if (candidate == null) {
+      final filteredEmpty =
+          _hasActiveFilters && _remainingCandidates.isNotEmpty;
       return Center(
         child: Padding(
           padding: const EdgeInsets.all(24),
@@ -227,29 +519,37 @@ class _BuddySwipeScreenState extends State<BuddySwipeScreen> {
                     color: AppColors.primaryOrange.withValues(alpha: 0.10),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
-                    Icons.people_outline,
+                  child: Icon(
+                    filteredEmpty
+                        ? Icons.filter_alt_off_outlined
+                        : Icons.people_outline,
                     size: 36,
                     color: AppColors.primaryOrange,
                   ),
                 ),
                 const SizedBox(height: 16),
-                const Text(
-                  'Hết hồ sơ phù hợp lúc này',
+                Text(
+                  filteredEmpty
+                      ? 'Không có hồ sơ phù hợp bộ lọc'
+                      : 'Hết hồ sơ phù hợp lúc này',
                   style: AppTextStyles.heading2,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'Bạn có thể quay lại sau khi có thêm hội viên phù hợp.',
+                Text(
+                  filteredEmpty
+                      ? 'Thử nới bộ lọc để xem thêm bạn tập.'
+                      : 'Bạn có thể quay lại sau khi có thêm hội viên phù hợp.',
                   style: AppTextStyles.body,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
                 OutlinedButton.icon(
-                  onPressed: _loadFeed,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Tải lại'),
+                  onPressed: filteredEmpty ? _clearFilters : _loadFeed,
+                  icon: Icon(
+                    filteredEmpty ? Icons.filter_alt_off : Icons.refresh,
+                  ),
+                  label: Text(filteredEmpty ? 'Xóa bộ lọc' : 'Tải lại'),
                 ),
               ],
             ),
@@ -262,8 +562,10 @@ class _BuddySwipeScreenState extends State<BuddySwipeScreen> {
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
       child: Column(
         children: [
-          const Text(
-            'Chạm vào thẻ để xem thêm · Vuốt để chọn',
+          Text(
+            _hasActiveFilters
+                ? 'Đang lọc · ${_filteredCandidates.length} hồ sơ còn lại'
+                : 'Chạm vào thẻ để xem thêm · Vuốt để chọn',
             style: AppTextStyles.caption,
           ),
           const SizedBox(height: 12),
