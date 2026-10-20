@@ -105,7 +105,12 @@ function paymentResponse(order, paymentConfig = {}) {
   const accountNo = paymentConfig.accountNo?.trim();
   const accountName = paymentConfig.accountName?.trim();
   const ready = Boolean(bankId && accountNo && accountName);
-  const description = order?.payment_code ?? '';
+  const paymentCode = order?.payment_code ?? '';
+  // VietinBank personal/business-household accounts linked through SePay
+  // require SEVQR in the transfer memo so transaction notifications are pushed.
+  const description = bankId?.toLowerCase() === 'vietinbank'
+    ? `SEVQR ${paymentCode}`
+    : paymentCode;
   let qrUrl = null;
   if (ready && order?.payment_amount_vnd && description) {
     const params = new URLSearchParams({
@@ -508,8 +513,10 @@ export function createApp({
       transfer_content_input: input.content,
       provider_transaction_at_input: transactionAt,
     });
-    const settled = mapRpcError(result);
-    res.json({ success: true, ...settled });
+    mapRpcError(result);
+    // SePay treats the webhook as delivered only when the response body is
+    // exactly {"success":true} with HTTP 200/201.
+    res.json({ success: true });
   });
 
   app.get('/trainers/:id/slots', requireAuth, async (req, res) => {
