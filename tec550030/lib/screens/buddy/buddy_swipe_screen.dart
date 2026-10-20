@@ -370,7 +370,13 @@ class _BuddySwipeScreenState extends State<BuddySwipeScreen> {
           children: [
             Icon(Icons.handshake_outlined, color: AppColors.success),
             SizedBox(width: 10),
-            Text('Gym Match!'),
+            Expanded(
+              child: Text(
+                'Gym Match!',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: Column(
