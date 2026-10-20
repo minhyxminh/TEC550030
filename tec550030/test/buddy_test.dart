@@ -255,6 +255,34 @@ void main() {
       expect(result['conversation_id'], 'conv-uuid');
     });
 
+    test('createGroup posts matched member ids to /buddy/groups', () async {
+      Map<String, dynamic>? postedBody;
+      ApiClient.httpClient = mockApi((request) {
+        if (request.url.path == '/buddy/groups' && request.method == 'POST') {
+          postedBody = jsonDecode(request.body) as Map<String, dynamic>;
+          return jsonResponse({
+            'id': 'group-conv',
+            'conversation_id': 'group-conv',
+            'type': 'GROUP',
+            'title': 'Leg Day Team',
+            'member_count': 3,
+          }, 201);
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final result = await service.createGroup(
+        'Leg Day Team',
+        ['u2', 'u3'],
+      );
+
+      expect(postedBody?['title'], 'Leg Day Team');
+      expect(postedBody?['member_ids'], ['u2', 'u3']);
+      expect(result['conversation_id'], 'group-conv');
+      expect(result['type'], 'GROUP');
+      expect(result['member_count'], 3);
+    });
+
     test('getMatches parses list from /buddy/matches', () async {
       ApiClient.httpClient = mockApi((request) {
         if (request.url.path == '/buddy/matches') {
