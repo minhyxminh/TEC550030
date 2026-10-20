@@ -53,6 +53,7 @@ const businessErrors = {
   BOOKING_STARTED: [409, 'Buổi tập đã bắt đầu, không thể hủy.'], ORDER_PROCESSED: [409, 'Đơn này đã được xử lý.'],
   GYM_NOT_FOUND: [404, 'Cơ sở không tồn tại hoặc đang ngừng hoạt động.'],
   OPEN_SESSION: [409, 'Hãy check-out trước khi đổi cơ sở tập.'],
+  CANNOT_SWIPE_SELF: [400, 'Không thể tự kết nối với chính mình.'],
 };
 async function workflow(client, name, action, payload = {}) {
   const result = await client.rpc(name, { action, payload });
@@ -244,6 +245,69 @@ export function createApp({ createSupabase, corsOrigins = [], trustProxy = false
     res.json(await workflow(req.supabase, 'gymflow_chat', 'read', {
       ...input, conversation_id: uuid.parse(req.params.id),
     }));
+  });
+
+  const buddyProfileSchema = z.object({
+    enabled: z.boolean().optional(),
+    age: z.number().int().min(16).max(100).nullable().optional(),
+    gender: z.string().trim().max(50).nullable().optional(),
+    show_age: z.boolean().optional(),
+    show_gender: z.boolean().optional(),
+    fitness_goal: z.string().trim().max(200).nullable().optional(),
+    experience_level: z.enum(['BEGINNER', 'INTERMEDIATE', 'ADVANCED']).nullable().optional(),
+    favorite_workouts: z.array(z.string().trim().max(100)).max(20).optional(),
+    preferred_workout_times: z.array(z.string().trim().max(100)).max(20).optional(),
+    workout_style: z.array(z.string().trim().max(100)).max(20).optional(),
+    bio: z.string().trim().max(1000).nullable().optional(),
+    onboarding_completed: z.boolean().optional(),
+    looking_for_partner: z.boolean().optional(),
+    partner_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+    partner_start_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).nullable().optional(),
+    partner_end_time: z.string().regex(/^\d{2}:\d{2}(:\d{2})?$/).nullable().optional(),
+    partner_workout: z.string().trim().max(200).nullable().optional(),
+    partner_gym_id: z.string().trim().max(100).nullable().optional(),
+    partner_note: z.string().trim().max(1000).nullable().optional(),
+  }).strict();
+
+  app.get('/buddy/profile', requireAuth, async (req, res) => {
+    const profile = await workflow(req.supabase, 'gymflow_buddy', 'PROFILE_GET');
+    if (!profile) return res.json(null);
+    const avatar = profile.avatar_path ? req.supabase.storage.from('gymflow-images').getPublicUrl(profile.avatar_path).data.publicUrl : null;
+    res.json({ ...profile, avatar_url: avatar });
+  });
+
+  app.post('/buddy/profile', requireAuth, async (req, res) => {
+    const payload = buddyProfileSchema.parse(req.body);
+    const profile = await workflow(req.supabase, 'gymflow_buddy', 'PROFILE_UPSERT', payload);
+    const avatar = profile?.avatar_path ? req.supabase.storage.from('gymflow-images').getPublicUrl(profile.avatar_path).data.publicUrl : null;
+    res.json({ ...profile, avatar_url: avatar });
+  });
+
+  app.get('/buddy/feed', requireAuth, async (req, res) => {
+    const query = z.object({ limit: z.coerce.number().int().min(1).max(100).default(20) }).strict().parse(req.query);
+    const feed = await workflow(req.supabase, 'gymflow_buddy', 'FEED', query);
+    const candidates = (feed?.candidates || []).map(c => ({
+      ...c,
+      avatar_url: c.avatar_path ? req.supabase.storage.from('gymflow-images').getPublicUrl(c.avatar_path).data.publicUrl : null,
+    }));
+    res.json({ candidates });
+  });
+
+  app.post('/buddy/swipe', requireAuth, async (req, res) => {
+    const payload = z.object({
+      target_id: uuid,
+      action: z.enum(['LIKE', 'PASS']),
+    }).strict().parse(req.body);
+    res.json(await workflow(req.supabase, 'gymflow_buddy', 'SWIPE', payload));
+  });
+
+  app.get('/buddy/matches', requireAuth, async (req, res) => {
+    const data = await workflow(req.supabase, 'gymflow_buddy', 'MATCHES');
+    const matches = (data?.matches || []).map(m => ({
+      ...m,
+      other_avatar_url: m.other_avatar_path ? req.supabase.storage.from('gymflow-images').getPublicUrl(m.other_avatar_path).data.publicUrl : null,
+    }));
+    res.json({ matches });
   });
 
   app.get('/points/history', requireAuth, async (req, res) => {
