@@ -108,7 +108,12 @@ function paymentResponse(order, paymentConfig = {}) {
   const accountNo = paymentConfig.accountNo?.trim();
   const accountName = paymentConfig.accountName?.trim();
   const ready = Boolean(bankId && accountNo && accountName);
-  const description = order?.payment_code ?? '';
+  const paymentCode = order?.payment_code ?? '';
+  // VietinBank personal/business-household accounts linked through SePay
+  // require SEVQR in the transfer memo so transaction notifications are pushed.
+  const description = bankId?.toLowerCase() === 'vietinbank'
+    ? `SEVQR ${paymentCode}`
+    : paymentCode;
   let qrUrl = null;
   if (ready && order?.payment_amount_vnd && description) {
     const params = new URLSearchParams({
@@ -511,8 +516,10 @@ export function createApp({
       transfer_content_input: input.content,
       provider_transaction_at_input: transactionAt,
     });
-    const settled = mapRpcError(result);
-    res.json({ success: true, ...settled });
+    mapRpcError(result);
+    // SePay treats the webhook as delivered only when the response body is
+    // exactly {"success":true} with HTTP 200/201.
+    res.json({ success: true });
   });
 
   app.get('/trainers/:id/slots', requireAuth, async (req, res) => {
@@ -650,9 +657,7 @@ if (typeof Deno !== 'undefined') {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) throw new Error('Missing Supabase URL or publishable/anon key.');
   const gateway = createEdgeApp({
-    // User routes stay on the unprivileged key + JWT/RLS.
     createSupabase: makeClientFactory({ SUPABASE_URL: url, SUPABASE_PUBLISHABLE_KEY: key }),
-    // Trusted webhook settlement is isolated to the payment endpoint.
     createServiceSupabase: serviceKey
       ? makeClientFactory({ SUPABASE_URL: url, SUPABASE_PUBLISHABLE_KEY: serviceKey })
       : null,
