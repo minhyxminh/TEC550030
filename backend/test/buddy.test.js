@@ -318,7 +318,84 @@ test('Gym Buddy: migration 011 schema, feed rules, swipe/match transaction, chat
     assert.equal(rlsMessages.rows.length, 0);
   });
 
-  // 17. Existing SUPPORT chat tests still pass
+  // 17. GROUP creation only accepts Gym Buddies already matched with the creator
+  let groupConversationId;
+  await t.test('17. GROUP creation requires matched buddies and creates owner/member participants', async () => {
+    // Complete a second match: A <-> C. A previously PASSed C, so LIKE updates that swipe.
+    await as(userC);
+    await buddy('SWIPE', { target_id: userA, action: 'LIKE' });
+    await as(userA);
+    const secondMatch = await buddy('SWIPE', { target_id: userC, action: 'LIKE' });
+    assert.equal(secondMatch.matched, true);
+
+    const group = await buddy('GROUP_CREATE', {
+      title: 'Leg Day Team',
+      member_ids: [userB, userC],
+    });
+    assert.equal(group.type, 'GROUP');
+    assert.equal(group.title, 'Leg Day Team');
+    assert.equal(group.member_count, 3);
+    assert.ok(group.conversation_id);
+    groupConversationId = group.conversation_id;
+
+    await db.exec('reset role');
+    const conv = (await db.query('select * from public.conversations where id=$1', [groupConversationId])).rows[0];
+    assert.equal(conv.type, 'GROUP');
+    assert.equal(conv.title, 'Leg Day Team');
+    assert.equal(conv.created_by, userA);
+
+    const participants = (await db.query(
+      'select user_id, role from public.conversation_participants where conversation_id=$1 order by user_id',
+      [groupConversationId],
+    )).rows;
+    assert.equal(participants.length, 3);
+    assert.equal(participants.find(p => p.user_id === userA).role, 'OWNER');
+    assert.equal(participants.find(p => p.user_id === userB).role, 'MEMBER');
+    assert.equal(participants.find(p => p.user_id === userC).role, 'MEMBER');
+  });
+
+  await t.test('18. GROUP creation rejects users who are not matched with the creator', async () => {
+    await as(userA);
+    await assert.rejects(
+      buddy('GROUP_CREATE', {
+        title: 'Invalid Group',
+        member_ids: [userB, inactiveUser],
+      }),
+      /NOT_MATCHED/,
+    );
+  });
+
+  await t.test('19. GROUP participants can send/read while outsiders are blocked', async () => {
+    await as(userA);
+    await chat('send', {
+      conversation_id: groupConversationId,
+      content: 'Team leg day lúc 18h nhé!',
+      client_id: crypto.randomUUID(),
+    });
+
+    await as(userC);
+    const groupMessages = await chat('messages', {
+      conversation_id: groupConversationId,
+    });
+    assert.equal(groupMessages.messages.length, 1);
+    assert.equal(groupMessages.messages[0].content, 'Team leg day lúc 18h nhé!');
+
+    await as(inactiveUser);
+    await assert.rejects(
+      chat('messages', { conversation_id: groupConversationId }),
+      /NOT_FOUND/,
+    );
+    await assert.rejects(
+      chat('send', {
+        conversation_id: groupConversationId,
+        content: 'Not in this group',
+        client_id: crypto.randomUUID(),
+      }),
+      /NOT_FOUND/,
+    );
+  });
+
+  // 20. Existing SUPPORT chat tests still pass
   await t.test('17. Existing SUPPORT chat flow still functions perfectly', async () => {
     await as(userA);
     const supportConv = await chat('open');
