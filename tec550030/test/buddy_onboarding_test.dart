@@ -168,7 +168,7 @@ void main() {
     testWidgets('5. Favorite workouts multi-selection works', (tester) async {
       await openScreen(
         tester,
-        const BuddyOnboardingScreen(
+        BuddyOnboardingScreen(
           branchService: FakeBranchService(),
           buddyService: FakeBuddyService(),
         ),
@@ -190,7 +190,7 @@ void main() {
     testWidgets('6. Experience level selection works', (tester) async {
       await openScreen(
         tester,
-        const BuddyOnboardingScreen(
+        BuddyOnboardingScreen(
           branchService: FakeBranchService(),
           buddyService: FakeBuddyService(),
         ),
@@ -206,7 +206,7 @@ void main() {
     testWidgets('7. Workout time multi-selection works', (tester) async {
       await openScreen(
         tester,
-        const BuddyOnboardingScreen(
+        BuddyOnboardingScreen(
           branchService: FakeBranchService(),
           buddyService: FakeBuddyService(),
         ),
@@ -228,7 +228,7 @@ void main() {
     testWidgets('8. Looking-for-partner OFF: partner fields hidden', (tester) async {
       await openScreen(
         tester,
-        const BuddyOnboardingScreen(
+        BuddyOnboardingScreen(
           branchService: FakeBranchService(),
           buddyService: FakeBuddyService(),
         ),
@@ -241,7 +241,7 @@ void main() {
     testWidgets('9. Looking-for-partner ON: partner fields visible', (tester) async {
       await openScreen(
         tester,
-        const BuddyOnboardingScreen(
+        BuddyOnboardingScreen(
           branchService: FakeBranchService(),
           buddyService: FakeBuddyService(),
         ),
