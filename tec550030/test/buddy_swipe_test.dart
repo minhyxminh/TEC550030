@@ -66,6 +66,12 @@ BuddyProfile candidate({
   String id = 'u2',
   String name = 'Lan',
   bool looking = true,
+  String gymId = '1',
+  String gymName = 'GymFlow Nguyễn Chí Thanh',
+  String district = 'Quận 10',
+  String goal = 'MUSCLE_GAIN',
+  List<String> workouts = const ['Leg Day', 'Glutes'],
+  List<String> times = const ['EVENING'],
 }) {
   return BuddyProfile(
     userId: id,
@@ -75,13 +81,14 @@ BuddyProfile candidate({
     gender: 'Nữ',
     showAge: true,
     showGender: true,
-    gymName: 'GymFlow Nguyễn Chí Thanh',
-    district: 'Quận 10',
+    homeGymId: gymId,
+    gymName: gymName,
+    district: district,
     onboardingCompleted: true,
-    fitnessGoal: 'MUSCLE_GAIN',
+    fitnessGoal: goal,
     experienceLevel: 'INTERMEDIATE',
-    favoriteWorkouts: const ['Leg Day', 'Glutes'],
-    preferredWorkoutTimes: const ['EVENING'],
+    favoriteWorkouts: workouts,
+    preferredWorkoutTimes: times,
     workoutStyle: const ['Tập nghiêm túc', 'Thích có spotter'],
     bio: 'Tìm bạn tập buổi tối.',
     lookingForPartner: looking,
@@ -190,6 +197,92 @@ void main() {
 
     expect(service.actions, ['LIKE:u2']);
     expect(find.text('Mai'), findsOneWidget);
+  });
+
+
+  testWidgets('mutual like shows Gym Match dialog with chat action', (tester) async {
+    final service = FakeSwipeBuddyService(
+      feed: [candidate()],
+      swipeResults: const {
+        'LIKE:u2': {
+          'matched': true,
+          'action': 'LIKE',
+          'match_id': 'match-1',
+          'conversation_id': 'conv-1',
+          'is_new': true,
+        },
+      },
+    );
+    await pumpSwipe(tester, service: service);
+
+    await tester.tap(find.byTooltip('Kết nối'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Gym Match!'), findsOneWidget);
+    expect(find.text('Bạn và Lan cùng muốn kết nối.'), findsOneWidget);
+    expect(find.text('Nhắn tin'), findsOneWidget);
+    expect(find.text('Tiếp tục xem'), findsOneWidget);
+  });
+
+  testWidgets('filters can narrow candidates by goal', (tester) async {
+    final service = FakeSwipeBuddyService(
+      feed: [
+        candidate(id: 'u2', name: 'Lan', goal: 'MUSCLE_GAIN'),
+        candidate(
+          id: 'u3',
+          name: 'Mai',
+          goal: 'FAT_LOSS',
+          gymId: '2',
+          gymName: 'GymFlow Hậu Giang',
+          district: 'Quận 6',
+          workouts: const ['Cardio'],
+          times: const ['MORNING'],
+        ),
+      ],
+    );
+    await pumpSwipe(tester, service: service);
+
+    await tester.tap(find.byTooltip('Bộ lọc'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Bộ lọc bạn tập'), findsOneWidget);
+    await tester.tap(find.text('Giảm mỡ'));
+    await tester.tap(find.text('Áp dụng'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mai'), findsOneWidget);
+    expect(find.text('Lan'), findsNothing);
+    expect(find.textContaining('Đang lọc'), findsOneWidget);
+  });
+
+  testWidgets('empty filtered state can clear filters', (tester) async {
+    final service = FakeSwipeBuddyService(
+      feed: [
+        candidate(id: 'u2', name: 'Lan', goal: 'MUSCLE_GAIN'),
+      ],
+    );
+    await pumpSwipe(tester, service: service);
+
+    await tester.tap(find.byTooltip('Bộ lọc'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Leg Day'));
+    await tester.tap(find.text('Tất cả').last);
+    await tester.pump();
+
+    // Select an option that is absent from the candidate by using the time filter.
+    await tester.tap(find.text('Tối'));
+    await tester.tap(find.text('Áp dụng'));
+    await tester.pumpAndSettle();
+
+    // Candidate still matches evening; reopen and clear through the dedicated action.
+    await tester.tap(find.byTooltip('Bộ lọc'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Xóa lọc'));
+    await tester.tap(find.text('Áp dụng'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Lan'), findsOneWidget);
   });
 
   testWidgets('empty state is shown when there are no candidates', (tester) async {
