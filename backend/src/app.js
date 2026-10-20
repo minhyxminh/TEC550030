@@ -120,7 +120,7 @@ function paymentResponse(order, paymentConfig = {}) {
       addInfo: description,
       accountName,
     });
-    qrUrl = `https://img.vietqr.io/image/${encodeURIComponent(bankId)}-${encodeURIComponent(accountNo)}-compact.svg?${params.toString()}`;
+    qrUrl = `https://img.vietqr.io/image/${encodeURIComponent(bankId)}-${encodeURIComponent(accountNo)}-compact.png?${params.toString()}`;
   }
   return {
     ...order,
