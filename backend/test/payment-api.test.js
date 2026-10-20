@@ -126,7 +126,7 @@ test('membership payment endpoints require auth and return configured real QR da
   assert.equal(order.payment_amount_vnd, 5000);
   assert.equal(order.payment_ready, true);
   assert.equal(order.bank.account_no, '1234567890');
-  assert.match(order.qr_url, /^https:\/\/img\.vietqr\.io\/image\/970415-1234567890-compact\.svg\?/);
+  assert.match(order.qr_url, /^https:\/\/img\.vietqr\.io\/image\/970415-1234567890-compact\.png\?/);
   assert.match(order.qr_url, /amount=5000/);
   assert.match(order.qr_url, /SEVQR/);
   assert.match(order.qr_url, new RegExp(paymentCode));
