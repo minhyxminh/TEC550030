@@ -396,7 +396,7 @@ test('Gym Buddy: migration 011 schema, feed rules, swipe/match transaction, chat
   });
 
   // 20. Existing SUPPORT chat tests still pass
-  await t.test('17. Existing SUPPORT chat flow still functions perfectly', async () => {
+  await t.test('20. Existing SUPPORT chat flow still functions perfectly', async () => {
     await as(userA);
     const supportConv = await chat('open');
     assert.ok(supportConv.id);
