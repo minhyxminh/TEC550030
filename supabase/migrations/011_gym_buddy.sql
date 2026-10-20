@@ -552,13 +552,13 @@ begin
 
     if (
       select count(distinct member_id)
-      from unnest(group_member_ids) as member_id
+      from unnest(group_member_ids) as members(member_id)
     ) <> group_member_count then
       raise exception 'INVALID_INPUT';
     end if;
 
     select count(*) into matched_member_count
-    from unnest(group_member_ids) as member_id
+    from unnest(group_member_ids) as members(member_id)
     where exists (
       select 1
       from public.buddy_matches bm
@@ -581,7 +581,7 @@ begin
 
     insert into public.conversation_participants (conversation_id, user_id, role)
     select new_conv_id, member_id, 'MEMBER'
-    from unnest(group_member_ids) as member_id
+    from unnest(group_member_ids) as members(member_id)
     on conflict (conversation_id, user_id) do nothing;
 
     return jsonb_build_object(
