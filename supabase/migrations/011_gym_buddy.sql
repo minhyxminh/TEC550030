@@ -313,22 +313,34 @@ begin
       raise exception 'INVALID_INPUT';
     end if;
 
-    if jsonb_typeof(coalesce(payload->'favorite_workouts', '[]'::jsonb)) <> 'array'
-      or jsonb_array_length(coalesce(payload->'favorite_workouts', '[]'::jsonb)) > 20
+    if jsonb_typeof(coalesce(payload->'favorite_workouts', '[]'::jsonb)) <> 'array' then
+      raise exception 'INVALID_INPUT';
+    end if;
+    if jsonb_array_length(coalesce(payload->'favorite_workouts', '[]'::jsonb)) > 20
       or exists (
         select 1
         from jsonb_array_elements(coalesce(payload->'favorite_workouts', '[]'::jsonb)) as item(value)
         where jsonb_typeof(value) <> 'string' or length(value #>> '{}') > 100
-      )
-      or jsonb_typeof(coalesce(payload->'preferred_workout_times', '[]'::jsonb)) <> 'array'
-      or jsonb_array_length(coalesce(payload->'preferred_workout_times', '[]'::jsonb)) > 20
+      ) then
+      raise exception 'INVALID_INPUT';
+    end if;
+
+    if jsonb_typeof(coalesce(payload->'preferred_workout_times', '[]'::jsonb)) <> 'array' then
+      raise exception 'INVALID_INPUT';
+    end if;
+    if jsonb_array_length(coalesce(payload->'preferred_workout_times', '[]'::jsonb)) > 20
       or exists (
         select 1
         from jsonb_array_elements(coalesce(payload->'preferred_workout_times', '[]'::jsonb)) as item(value)
         where jsonb_typeof(value) <> 'string' or length(value #>> '{}') > 100
-      )
-      or jsonb_typeof(coalesce(payload->'workout_style', '[]'::jsonb)) <> 'array'
-      or jsonb_array_length(coalesce(payload->'workout_style', '[]'::jsonb)) > 20
+      ) then
+      raise exception 'INVALID_INPUT';
+    end if;
+
+    if jsonb_typeof(coalesce(payload->'workout_style', '[]'::jsonb)) <> 'array' then
+      raise exception 'INVALID_INPUT';
+    end if;
+    if jsonb_array_length(coalesce(payload->'workout_style', '[]'::jsonb)) > 20
       or exists (
         select 1
         from jsonb_array_elements(coalesce(payload->'workout_style', '[]'::jsonb)) as item(value)
