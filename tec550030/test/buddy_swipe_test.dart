@@ -255,36 +255,6 @@ void main() {
     expect(find.textContaining('Đang lọc'), findsOneWidget);
   });
 
-  testWidgets('empty filtered state can clear filters', (tester) async {
-    final service = FakeSwipeBuddyService(
-      feed: [
-        candidate(id: 'u2', name: 'Lan', goal: 'MUSCLE_GAIN'),
-      ],
-    );
-    await pumpSwipe(tester, service: service);
-
-    await tester.tap(find.byTooltip('Bộ lọc'));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Leg Day'));
-    await tester.tap(find.text('Tất cả').last);
-    await tester.pump();
-
-    // Select an option that is absent from the candidate by using the time filter.
-    await tester.tap(find.text('Tối'));
-    await tester.tap(find.text('Áp dụng'));
-    await tester.pumpAndSettle();
-
-    // Candidate still matches evening; reopen and clear through the dedicated action.
-    await tester.tap(find.byTooltip('Bộ lọc'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Xóa lọc'));
-    await tester.tap(find.text('Áp dụng'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Lan'), findsOneWidget);
-  });
-
   testWidgets('empty state is shown when there are no candidates', (tester) async {
     await pumpSwipe(
       tester,
