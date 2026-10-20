@@ -281,13 +281,17 @@ void main() {
       final invalidTimeProfile = const BuddyProfile(
         userId: 'u1',
         name: 'Test',
+        onboardingCompleted: true,
         fitnessGoal: 'MUSCLE_GAIN',
         experienceLevel: 'INTERMEDIATE',
         favoriteWorkouts: ['Leg Day'],
         preferredWorkoutTimes: ['AFTERNOON'],
         lookingForPartner: true,
+        partnerDate: '2026-10-25',
         partnerStartTime: '19:00',
         partnerEndTime: '18:00',
+        partnerWorkout: 'Leg Day',
+        partnerGymId: '1',
       );
 
       await tester.pumpWidget(MaterialApp(
@@ -304,6 +308,40 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Giờ kết thúc phải sau giờ bắt đầu.'), findsOneWidget);
+      expect(fakeBuddy.lastSavedPayload, isNull);
+    });
+
+    testWidgets('10b. Looking-for-partner requires a date before save', (tester) async {
+      final fakeBuddy = FakeBuddyService();
+      final incompleteProfile = const BuddyProfile(
+        userId: 'u1',
+        name: 'Test',
+        onboardingCompleted: true,
+        fitnessGoal: 'MUSCLE_GAIN',
+        experienceLevel: 'INTERMEDIATE',
+        favoriteWorkouts: ['Leg Day'],
+        preferredWorkoutTimes: ['EVENING'],
+        lookingForPartner: true,
+        partnerStartTime: '18:00',
+        partnerEndTime: '19:00',
+        partnerWorkout: 'Leg Day',
+        partnerGymId: '1',
+      );
+
+      await openScreen(
+        tester,
+        BuddyOnboardingScreen(
+          existingProfile: incompleteProfile,
+          buddyService: fakeBuddy,
+          branchService: const FakeBranchService(),
+          homeGymId: '1',
+        ),
+      );
+
+      await tester.tap(find.text('Lưu thay đổi'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Vui lòng chọn ngày muốn tập.'), findsOneWidget);
       expect(fakeBuddy.lastSavedPayload, isNull);
     });
 
