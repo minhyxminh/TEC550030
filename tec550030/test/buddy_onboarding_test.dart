@@ -6,7 +6,7 @@ import 'package:tec550030/core/theme/app_theme.dart';
 import 'package:tec550030/models/buddy_profile.dart';
 import 'package:tec550030/models/gym_branch.dart';
 import 'package:tec550030/screens/buddy/buddy_onboarding_screen.dart';
-import 'package:tec550030/screens/buddy/buddy_ready_screen.dart';
+import 'package:tec550030/screens/buddy/buddy_swipe_screen.dart';
 import 'package:tec550030/screens/home/home_screen.dart';
 import 'package:tec550030/services/branch_service.dart';
 import 'package:tec550030/services/buddy_service.dart';
@@ -117,7 +117,7 @@ void main() {
       expect(find.text('Thiết lập Gym Buddy'), findsOneWidget);
     });
 
-    testWidgets('3. Completed profile: tap does NOT reopen onboarding, opens BuddyReadyScreen', (tester) async {
+    testWidgets('3. Completed profile: tap does NOT reopen onboarding, opens BuddySwipeScreen', (tester) async {
       final completedProfile = const BuddyProfile(
         userId: 'u1',
         name: 'Member Test',
@@ -147,8 +147,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byType(BuddyOnboardingScreen), findsNothing);
-      expect(find.byType(BuddyReadyScreen), findsOneWidget);
-      expect(find.text('Hồ sơ của bạn đã sẵn sàng!'), findsOneWidget);
+      expect(find.byType(BuddySwipeScreen), findsOneWidget);
+      expect(find.text('Kết nối bạn tập'), findsOneWidget);
     });
   });
 
