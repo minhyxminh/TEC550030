@@ -115,10 +115,28 @@ begin
     raise exception using errcode = 'P0001', message = 'NOT_FOUND';
   end if;
 
-  if exists (
-    select 1 from public.membership_orders
-    where user_id = uid and status = 'PENDING'
-  ) then
+  select * into existing_order
+  from public.membership_orders
+  where user_id = uid and status = 'PENDING'
+  order by created_at desc, id
+  limit 1
+  for update;
+
+  if found then
+    -- Reopening the same unpaid package returns the same QR/order instead of
+    -- creating duplicate bank references. A different package remains blocked.
+    if existing_order.payment_code is not null
+      and existing_order.membership_id = membership_id_input then
+      return (
+        select to_jsonb(o) || jsonb_build_object(
+          'membership_name', m.name,
+          'points_on_activation', m.points_on_activation
+        )
+        from public.membership_orders o
+        join public.memberships m on m.id = o.membership_id
+        where o.id = existing_order.id
+      );
+    end if;
     raise exception using errcode = 'P0001', message = 'PENDING_ORDER_EXISTS';
   end if;
 
