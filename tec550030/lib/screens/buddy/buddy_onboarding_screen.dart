@@ -190,7 +190,12 @@ class _BuddyOnboardingScreenState extends State<BuddyOnboardingScreen> {
       if (mounted) {
         setState(() {
           _branches = branches;
-          _partnerGymId ??= widget.homeGymId ?? (branches.isNotEmpty ? branches.first.id : null);
+          final preferredGymId = _partnerGymId ?? widget.homeGymId;
+          final preferredGymExists = preferredGymId != null &&
+              branches.any((branch) => branch.id == preferredGymId);
+          _partnerGymId = preferredGymExists
+              ? preferredGymId
+              : (branches.isNotEmpty ? branches.first.id : null);
           _loadingBranches = false;
         });
       }
@@ -282,13 +287,29 @@ class _BuddyOnboardingScreenState extends State<BuddyOnboardingScreen> {
     }
 
     if (_lookingForPartner) {
-      if (_partnerStartTime != null && _partnerEndTime != null) {
-        final startMin = _partnerStartTime!.hour * 60 + _partnerStartTime!.minute;
-        final endMin = _partnerEndTime!.hour * 60 + _partnerEndTime!.minute;
-        if (endMin <= startMin) {
-          _showError('Giờ kết thúc phải sau giờ bắt đầu.');
-          return;
-        }
+      if (_partnerDate == null) {
+        _showError('Vui lòng chọn ngày muốn tập.');
+        return;
+      }
+      if (_partnerStartTime == null || _partnerEndTime == null) {
+        _showError('Vui lòng chọn đầy đủ giờ bắt đầu và giờ kết thúc.');
+        return;
+      }
+
+      final startMin = _partnerStartTime!.hour * 60 + _partnerStartTime!.minute;
+      final endMin = _partnerEndTime!.hour * 60 + _partnerEndTime!.minute;
+      if (endMin <= startMin) {
+        _showError('Giờ kết thúc phải sau giờ bắt đầu.');
+        return;
+      }
+
+      if (_partnerWorkout == null) {
+        _showError('Vui lòng chọn buổi tập đang tìm bạn.');
+        return;
+      }
+      if (_partnerGymId == null) {
+        _showError('Vui lòng chọn chi nhánh tập.');
+        return;
       }
     }
 
