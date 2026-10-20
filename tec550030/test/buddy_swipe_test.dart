@@ -1,0 +1,214 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:tec550030/core/theme/app_theme.dart';
+import 'package:tec550030/models/buddy_profile.dart';
+import 'package:tec550030/screens/buddy/buddy_swipe_screen.dart';
+import 'package:tec550030/services/buddy_service.dart';
+
+class FakeSwipeBuddyService extends BuddyService {
+  final List<BuddyProfile> feed;
+  final Object? feedError;
+  final Map<String, Map<String, dynamic>> swipeResults;
+  final List<String> actions = [];
+
+  FakeSwipeBuddyService({
+    this.feed = const [],
+    this.feedError,
+    this.swipeResults = const {},
+  });
+
+  @override
+  Future<List<BuddyProfile>> getFeed({int limit = 20}) async {
+    if (feedError != null) throw feedError!;
+    return List<BuddyProfile>.from(feed);
+  }
+
+  @override
+  Future<Map<String, dynamic>> swipe(String targetId, String action) async {
+    actions.add('$action:$targetId');
+    return swipeResults['$action:$targetId'] ??
+        <String, dynamic>{'matched': false, 'action': action};
+  }
+
+  @override
+  Future<BuddyProfile?> getProfile() async => null;
+}
+
+Future<void> pumpSwipe(
+  WidgetTester tester, {
+  required FakeSwipeBuddyService service,
+}) async {
+  tester.view.physicalSize = const Size(390, 844);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+
+  const me = BuddyProfile(
+    userId: 'me',
+    name: 'Me',
+    onboardingCompleted: true,
+    homeGymId: '1',
+  );
+
+  await tester.pumpWidget(
+    MaterialApp(
+      theme: AppTheme.lightTheme,
+      home: BuddySwipeScreen(
+        profile: me,
+        buddyService: service,
+      ),
+    ),
+  );
+  await tester.pumpAndSettle();
+}
+
+BuddyProfile candidate({
+  String id = 'u2',
+  String name = 'Lan',
+  bool looking = true,
+}) {
+  return BuddyProfile(
+    userId: id,
+    name: name,
+    avatarUrl: '',
+    age: 24,
+    gender: 'Nữ',
+    showAge: true,
+    showGender: true,
+    gymName: 'GymFlow Nguyễn Chí Thanh',
+    district: 'Quận 10',
+    onboardingCompleted: true,
+    fitnessGoal: 'MUSCLE_GAIN',
+    experienceLevel: 'INTERMEDIATE',
+    favoriteWorkouts: const ['Leg Day', 'Glutes'],
+    preferredWorkoutTimes: const ['EVENING'],
+    workoutStyle: const ['Tập nghiêm túc', 'Thích có spotter'],
+    bio: 'Tìm bạn tập buổi tối.',
+    lookingForPartner: looking,
+    partnerDate: looking ? '2026-10-25' : null,
+    partnerStartTime: looking ? '18:00' : null,
+    partnerEndTime: looking ? '19:30' : null,
+    partnerWorkout: looking ? 'Leg Day' : null,
+    partnerGymName: looking ? 'GymFlow Nguyễn Chí Thanh' : null,
+    partnerNote: looking ? 'Cùng tập chân nhé' : null,
+  );
+}
+
+void main() {
+  testWidgets('shows loading then first candidate front card', (tester) async {
+    final service = FakeSwipeBuddyService(feed: [candidate()]);
+    await pumpSwipe(tester, service: service);
+
+    expect(find.text('Lan'), findsOneWidget);
+    expect(find.text('Đang tìm bạn tập'), findsOneWidget);
+    expect(find.text('GymFlow Nguyễn Chí Thanh · Quận 10'), findsOneWidget);
+  });
+
+  testWidgets('tap flips card and tap again returns to front', (tester) async {
+    final service = FakeSwipeBuddyService(feed: [candidate()]);
+    await pumpSwipe(tester, service: service);
+
+    await tester.tap(find.text('Lan'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Mục tiêu'), findsOneWidget);
+    expect(find.text('Tăng cơ'), findsOneWidget);
+    expect(find.text('Phong cách'), findsOneWidget);
+
+    await tester.tap(find.text('Lan'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Chạm để xem mục tiêu, lịch tập và phong cách tập'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('pass button sends PASS and advances candidate', (tester) async {
+    final service = FakeSwipeBuddyService(
+      feed: [
+        candidate(id: 'u2', name: 'Lan'),
+        candidate(id: 'u3', name: 'Mai', looking: false),
+      ],
+    );
+    await pumpSwipe(tester, service: service);
+
+    await tester.tap(find.byTooltip('Bỏ qua'));
+    await tester.pumpAndSettle();
+
+    expect(service.actions, ['PASS:u2']);
+    expect(find.text('Mai'), findsOneWidget);
+    expect(find.text('Lan'), findsNothing);
+  });
+
+  testWidgets('connect button sends LIKE and advances candidate', (tester) async {
+    final service = FakeSwipeBuddyService(
+      feed: [
+        candidate(id: 'u2', name: 'Lan'),
+        candidate(id: 'u3', name: 'Mai'),
+      ],
+    );
+    await pumpSwipe(tester, service: service);
+
+    await tester.tap(find.byTooltip('Kết nối'));
+    await tester.pumpAndSettle();
+
+    expect(service.actions, ['LIKE:u2']);
+    expect(find.text('Mai'), findsOneWidget);
+  });
+
+  testWidgets('drag left passes current candidate', (tester) async {
+    final service = FakeSwipeBuddyService(
+      feed: [
+        candidate(id: 'u2', name: 'Lan'),
+        candidate(id: 'u3', name: 'Mai'),
+      ],
+    );
+    await pumpSwipe(tester, service: service);
+
+    final cardFinder = find.text('Lan');
+    final center = tester.getCenter(cardFinder);
+    await tester.dragFrom(center, const Offset(-180, 0));
+    await tester.pumpAndSettle();
+
+    expect(service.actions, ['PASS:u2']);
+    expect(find.text('Mai'), findsOneWidget);
+  });
+
+  testWidgets('drag right likes current candidate', (tester) async {
+    final service = FakeSwipeBuddyService(
+      feed: [
+        candidate(id: 'u2', name: 'Lan'),
+        candidate(id: 'u3', name: 'Mai'),
+      ],
+    );
+    await pumpSwipe(tester, service: service);
+
+    final center = tester.getCenter(find.text('Lan'));
+    await tester.dragFrom(center, const Offset(180, 0));
+    await tester.pumpAndSettle();
+
+    expect(service.actions, ['LIKE:u2']);
+    expect(find.text('Mai'), findsOneWidget);
+  });
+
+  testWidgets('empty state is shown when there are no candidates', (tester) async {
+    await pumpSwipe(
+      tester,
+      service: FakeSwipeBuddyService(feed: const []),
+    );
+
+    expect(find.text('Hết hồ sơ phù hợp lúc này'), findsOneWidget);
+    expect(find.text('Tải lại'), findsOneWidget);
+  });
+
+  testWidgets('error state offers retry', (tester) async {
+    await pumpSwipe(
+      tester,
+      service: FakeSwipeBuddyService(feedError: Exception('offline')),
+    );
+
+    expect(find.text('Không thể tải danh sách bạn tập'), findsOneWidget);
+    expect(find.text('Thử lại'), findsOneWidget);
+  });
+}
