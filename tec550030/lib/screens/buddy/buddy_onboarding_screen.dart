@@ -740,6 +740,7 @@ class _BuddyOnboardingScreenState extends State<BuddyOnboardingScreen> {
                       const LinearProgressIndicator()
                     else
                       DropdownButtonFormField<String>(
+                        isExpanded: true,
                         initialValue: _partnerGymId,
                         decoration: const InputDecoration(border: OutlineInputBorder()),
                         items: _branches.map((b) {
