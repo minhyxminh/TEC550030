@@ -307,6 +307,14 @@ export function createApp({ createSupabase, corsOrigins = [], trustProxy = false
     res.json({ matches });
   });
 
+  app.post('/buddy/groups', requireAuth, async (req, res) => {
+    const payload = z.object({
+      title: z.string().trim().min(1).max(80),
+      member_ids: z.array(uuid).min(2).max(20),
+    }).strict().parse(req.body);
+    res.status(201).json(await workflow(req.supabase, 'gymflow_buddy', 'GROUP_CREATE', payload));
+  });
+
   app.get('/points/history', requireAuth, async (req, res) => {
     const { limit, offset } = page.parse(req.query);
     res.json(databaseResult(await req.supabase.from('point_transactions')
