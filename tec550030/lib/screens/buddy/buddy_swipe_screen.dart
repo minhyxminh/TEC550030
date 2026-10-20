@@ -10,6 +10,7 @@ import '../../services/buddy_service.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/catalogue_widgets.dart';
 import '../chat/conversation_screen.dart';
+import 'buddy_group_create_screen.dart';
 import 'buddy_onboarding_screen.dart';
 
 class BuddySwipeScreen extends StatefulWidget {
@@ -445,6 +446,21 @@ class _BuddySwipeScreenState extends State<BuddySwipeScreen> {
       appBar: AppBar(
         title: const Text('Kết nối bạn tập'),
         actions: [
+          IconButton(
+            tooltip: 'Tạo nhóm bạn tập',
+            onPressed: _submitting
+                ? null
+                : () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => BuddyGroupCreateScreen(
+                        profile: _ownProfile,
+                        buddyService: widget.buddyService,
+                      ),
+                    ),
+                  ),
+            icon: const Icon(Icons.groups_outlined),
+          ),
           IconButton(
             tooltip: 'Bộ lọc',
             onPressed: _submitting ? null : _showFilters,
