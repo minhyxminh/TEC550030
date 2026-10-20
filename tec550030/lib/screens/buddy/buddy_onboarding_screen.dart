@@ -787,6 +787,28 @@ class _BuddyOnboardingScreenState extends State<BuddyOnboardingScreen> {
             ),
             const SizedBox(height: 28),
 
+            if (_error != null) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.error.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: AppColors.error.withValues(alpha: 0.25),
+                  ),
+                ),
+                child: Text(
+                  _error!,
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.error,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+
             // Save CTA
             AppButton(
               text: widget.isEditing ? 'Lưu thay đổi' : 'Hoàn tất',
