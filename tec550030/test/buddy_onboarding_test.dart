@@ -59,6 +59,15 @@ Future<void> openScreen(WidgetTester tester, Widget child) async {
   await tester.pumpAndSettle();
 }
 
+Future<void> scrollTo(WidgetTester tester, Finder finder) async {
+  await tester.scrollUntilVisible(
+    finder,
+    300,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
@@ -82,6 +91,7 @@ void main() {
         ),
       );
 
+      await scrollTo(tester, find.text('Kết nối bạn tập'));
       expect(find.text('Kết nối bạn tập'), findsOneWidget);
       expect(
         find.text('Tìm người cùng lịch và cùng mục tiêu tập luyện'),
@@ -99,6 +109,7 @@ void main() {
         ),
       );
 
+      await scrollTo(tester, find.text('Kết nối bạn tập'));
       await tester.tap(find.text('Kết nối bạn tập'));
       await tester.pumpAndSettle();
 
@@ -126,6 +137,10 @@ void main() {
         ),
       );
 
+      await scrollTo(
+        tester,
+        find.text('Khám phá những người phù hợp để tập cùng'),
+      );
       expect(find.text('Khám phá những người phù hợp để tập cùng'), findsOneWidget);
 
       await tester.tap(find.text('Kết nối bạn tập'));
@@ -196,6 +211,7 @@ void main() {
         ),
       );
 
+      await scrollTo(tester, find.text('Trung cấp'));
       await tester.tap(find.text('Trung cấp'));
       await tester.pumpAndSettle();
 
@@ -212,6 +228,7 @@ void main() {
         ),
       );
 
+      await scrollTo(tester, find.text('Sáng'));
       await tester.tap(find.text('Sáng'));
       await tester.tap(find.text('Tối'));
       await tester.pumpAndSettle();
@@ -234,6 +251,10 @@ void main() {
         ),
       );
 
+      await scrollTo(
+        tester,
+        find.widgetWithText(SwitchListTile, 'Đang tìm bạn tập'),
+      );
       expect(find.text('Chọn ngày muốn tập'), findsNothing);
       expect(find.text('Buổi tập cụ thể:'), findsNothing);
     });
@@ -248,9 +269,13 @@ void main() {
       );
 
       // Toggle switch
-      await tester.tap(find.widgetWithText(SwitchListTile, 'Đang tìm bạn tập'));
+      final lookingSwitch =
+          find.widgetWithText(SwitchListTile, 'Đang tìm bạn tập');
+      await scrollTo(tester, lookingSwitch);
+      await tester.tap(lookingSwitch);
       await tester.pumpAndSettle();
 
+      await scrollTo(tester, find.text('Chọn ngày muốn tập'));
       expect(find.text('Chọn ngày muốn tập'), findsOneWidget);
       expect(find.text('Buổi tập cụ thể:'), findsOneWidget);
       expect(find.text('Chi nhánh tập:'), findsOneWidget);
@@ -266,18 +291,7 @@ void main() {
         ),
       );
 
-      // Fill required fields
-      await tester.tap(find.text('Tăng cơ'));
-      await tester.tap(find.text('Leg Day'));
-      await tester.tap(find.text('Trung cấp'));
-      await tester.tap(find.text('Chiều'));
-
-      // Turn on looking for partner
-      await tester.tap(find.widgetWithText(SwitchListTile, 'Đang tìm bạn tập'));
-      await tester.pumpAndSettle();
-
-      // Pick start time = 19:00 and end time = 18:00
-      // We can simulate state by editing profile with invalid time
+      // Simulate an existing profile with an invalid time range.
       final invalidTimeProfile = const BuddyProfile(
         userId: 'u1',
         name: 'Test',
@@ -304,6 +318,7 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
+      await scrollTo(tester, find.text('Lưu thay đổi'));
       await tester.tap(find.text('Lưu thay đổi'));
       await tester.pumpAndSettle();
 
@@ -338,6 +353,7 @@ void main() {
         ),
       );
 
+      await scrollTo(tester, find.text('Lưu thay đổi'));
       await tester.tap(find.text('Lưu thay đổi'));
       await tester.pumpAndSettle();
 
@@ -356,6 +372,7 @@ void main() {
       );
 
       // Tap Hoàn tất without selecting anything
+      await scrollTo(tester, find.text('Hoàn tất'));
       await tester.tap(find.text('Hoàn tất'));
       await tester.pumpAndSettle();
 
@@ -375,10 +392,13 @@ void main() {
 
       await tester.tap(find.text('Tăng cơ'));
       await tester.tap(find.text('Chest'));
+      await scrollTo(tester, find.text('Mới bắt đầu'));
       await tester.tap(find.text('Mới bắt đầu'));
+      await scrollTo(tester, find.text('Sáng'));
       await tester.tap(find.text('Sáng'));
       await tester.pumpAndSettle();
 
+      await scrollTo(tester, find.text('Hoàn tất'));
       await tester.tap(find.text('Hoàn tất'));
       await tester.pumpAndSettle();
 
@@ -418,17 +438,28 @@ void main() {
       );
 
       expect(find.text('Chỉnh sửa sở thích'), findsOneWidget);
-      expect(find.text('Lưu thay đổi'), findsOneWidget);
-      expect(find.text('Tập cùng nhau nâng cao sức khỏe'), findsOneWidget);
 
-      final goalChip = tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Giảm mỡ'));
+      final goalChip = tester.widget<ChoiceChip>(
+        find.widgetWithText(ChoiceChip, 'Giảm mỡ'),
+      );
       expect(goalChip.selected, isTrue);
 
-      final levelChip = tester.widget<ChoiceChip>(find.widgetWithText(ChoiceChip, 'Nâng cao'));
+      final backChip = tester.widget<FilterChip>(
+        find.widgetWithText(FilterChip, 'Back'),
+      );
+      expect(backChip.selected, isTrue);
+
+      await scrollTo(tester, find.text('Nâng cao'));
+      final levelChip = tester.widget<ChoiceChip>(
+        find.widgetWithText(ChoiceChip, 'Nâng cao'),
+      );
       expect(levelChip.selected, isTrue);
 
-      final backChip = tester.widget<FilterChip>(find.widgetWithText(FilterChip, 'Back'));
-      expect(backChip.selected, isTrue);
+      await scrollTo(tester, find.text('Tập cùng nhau nâng cao sức khỏe'));
+      expect(find.text('Tập cùng nhau nâng cao sức khỏe'), findsOneWidget);
+
+      await scrollTo(tester, find.text('Lưu thay đổi'));
+      expect(find.text('Lưu thay đổi'), findsOneWidget);
     });
 
     testWidgets('14. enabled toggle maps correctly', (tester) async {
@@ -443,13 +474,21 @@ void main() {
 
       await tester.tap(find.text('Tăng cơ'));
       await tester.tap(find.text('Chest'));
+      await scrollTo(tester, find.text('Mới bắt đầu'));
       await tester.tap(find.text('Mới bắt đầu'));
+      await scrollTo(tester, find.text('Sáng'));
       await tester.tap(find.text('Sáng'));
 
       // Toggle enabled OFF
-      await tester.tap(find.widgetWithText(SwitchListTile, 'Cho phép xuất hiện trong Kết nối bạn tập'));
+      final enabledToggle = find.widgetWithText(
+        SwitchListTile,
+        'Cho phép xuất hiện trong Kết nối bạn tập',
+      );
+      await scrollTo(tester, enabledToggle);
+      await tester.tap(enabledToggle);
       await tester.pumpAndSettle();
 
+      await scrollTo(tester, find.text('Hoàn tất'));
       await tester.tap(find.text('Hoàn tất'));
       await tester.pumpAndSettle();
 
@@ -468,13 +507,21 @@ void main() {
 
       await tester.tap(find.text('Tăng cơ'));
       await tester.tap(find.text('Chest'));
+      await scrollTo(tester, find.text('Mới bắt đầu'));
       await tester.tap(find.text('Mới bắt đầu'));
+      await scrollTo(tester, find.text('Sáng'));
       await tester.tap(find.text('Sáng'));
 
       // Toggle show_age OFF
-      await tester.tap(find.widgetWithText(SwitchListTile, 'Hiển thị tuổi trên Buddy Card'));
+      final showAgeToggle = find.widgetWithText(
+        SwitchListTile,
+        'Hiển thị tuổi trên Buddy Card',
+      );
+      await scrollTo(tester, showAgeToggle);
+      await tester.tap(showAgeToggle);
       await tester.pumpAndSettle();
 
+      await scrollTo(tester, find.text('Hoàn tất'));
       await tester.tap(find.text('Hoàn tất'));
       await tester.pumpAndSettle();
 
