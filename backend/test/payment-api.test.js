@@ -78,7 +78,7 @@ function makeApi() {
     createSupabase: () => userClient,
     createServiceSupabase: () => serviceClient,
     paymentConfig: {
-      bankId: 'Vietcombank',
+      bankId: 'VietinBank',
       accountNo: '1234567890',
       accountName: 'GYMFLOW DEMO',
       sepayApiKey: 'test-sepay-api-key-123456',
@@ -128,6 +128,7 @@ test('membership payment endpoints require auth and return configured real QR da
   assert.equal(order.bank.account_no, '1234567890');
   assert.match(order.qr_url, /^https:\/\/vietqr\.app\/img\?/);
   assert.match(order.qr_url, /amount=5000/);
+  assert.match(order.qr_url, /SEVQR/);
   assert.match(order.qr_url, new RegExp(paymentCode));
 
   const rpc = api.calls.find(c => c.name === 'gymflow_create_membership_payment');
@@ -169,8 +170,7 @@ test('SePay webhook rejects spoofing and settles incoming transaction with servi
   });
   assert.equal(good.status, 200);
   const data = await good.json();
-  assert.equal(data.success, true);
-  assert.equal(data.paid, true);
+  assert.deepEqual(data, { success: true });
 
   const rpc = api.calls.find(c => c.client === 'service');
   assert.equal(rpc.name, 'gymflow_confirm_membership_payment');
