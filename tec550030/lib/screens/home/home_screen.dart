@@ -65,7 +65,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (selected == true && mounted) setState(() => _version++);
   }
 
-  Future<void> _openBuddy(BuddyProfile? currentProfile) async {
+  Future<void> _openBuddy(BuddyProfile? currentProfile, String? homeGymId) async {
     if (_busyBuddy) return;
     setState(() => _busyBuddy = true);
     try {
@@ -79,7 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
               existingProfile: profile,
               buddyService: widget.buddyService,
               branchService: widget.branchService,
-              homeGymId: profile?.homeGymId,
+              homeGymId: profile?.homeGymId ?? homeGymId,
             ),
           ),
         );
@@ -102,12 +102,13 @@ class _HomeScreenState extends State<HomeScreen> {
                       existingProfile: profile,
                       buddyService: widget.buddyService,
                       branchService: widget.branchService,
-                      homeGymId: profile.homeGymId,
+                      homeGymId: profile.homeGymId ?? homeGymId,
                     ),
                   ),
                 );
                 if (changed == true && mounted) {
                   setState(() => _version++);
+                  Navigator.pop(context);
                 }
               },
             ),
@@ -194,7 +195,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 24),
           AppCard(
-            onTap: _busyBuddy ? null : () => _openBuddy(data.buddyProfile),
+            onTap: _busyBuddy ? null : () => _openBuddy(data.buddyProfile, data.account.user.homeGymId),
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
