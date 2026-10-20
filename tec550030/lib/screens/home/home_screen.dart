@@ -16,7 +16,7 @@ import '../../widgets/catalogue_widgets.dart';
 import '../../widgets/data_view.dart';
 import '../../widgets/membership_summary.dart';
 import '../buddy/buddy_onboarding_screen.dart';
-import '../buddy/buddy_ready_screen.dart';
+import '../buddy/buddy_swipe_screen.dart';
 import '../rewards/reward_detail_screen.dart';
 import '../../widgets/gym_panel.dart';
 import 'branch_selection_screen.dart';
@@ -90,27 +90,10 @@ class _HomeScreenState extends State<HomeScreen> {
         await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (_) => BuddyReadyScreen(
+            builder: (_) => BuddySwipeScreen(
               profile: profile,
               buddyService: widget.buddyService,
               branchService: widget.branchService,
-              onEdit: () async {
-                final changed = await Navigator.push<bool>(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => BuddyOnboardingScreen(
-                      existingProfile: profile,
-                      buddyService: widget.buddyService,
-                      branchService: widget.branchService,
-                      homeGymId: profile.homeGymId ?? homeGymId,
-                    ),
-                  ),
-                );
-                if (changed == true && mounted) {
-                  setState(() => _version++);
-                  Navigator.pop(context);
-                }
-              },
             ),
           ),
         );
