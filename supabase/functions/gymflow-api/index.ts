@@ -109,23 +109,21 @@ function paymentResponse(order, paymentConfig = {}) {
   const accountName = paymentConfig.accountName?.trim();
   const ready = Boolean(bankId && accountNo && accountName);
   const paymentCode = order?.payment_code ?? '';
-  // VietinBank personal/business-household accounts linked through SePay
-  // require SEVQR in the transfer memo so transaction notifications are pushed.
-  const description = bankId?.toLowerCase() === 'vietinbank'
+  const normalizedBank = bankId?.trim().toLowerCase();
+  const isVietinBank = ['vietinbank', 'icb', '970415'].includes(normalizedBank);
+  // VietinBank accounts linked through SePay need SEVQR in the transfer memo
+  // so incoming transactions are pushed reliably.
+  const description = isVietinBank
     ? `SEVQR ${paymentCode}`
     : paymentCode;
   let qrUrl = null;
   if (ready && order?.payment_amount_vnd && description) {
     const params = new URLSearchParams({
-      acc: accountNo,
-      bank: bankId,
       amount: String(order.payment_amount_vnd),
-      des: description,
-      template: 'compact',
-      showinfo: 'true',
-      holder: accountName,
+      addInfo: description,
+      accountName,
     });
-    qrUrl = `https://vietqr.app/img?${params.toString()}`;
+    qrUrl = `https://img.vietqr.io/image/${encodeURIComponent(bankId)}-${encodeURIComponent(accountNo)}-compact.svg?${params.toString()}`;
   }
   return {
     ...order,
