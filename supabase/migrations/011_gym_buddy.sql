@@ -243,6 +243,10 @@ declare
   new_conv_id uuid;
   match_rec public.buddy_matches;
   feed_limit integer;
+  group_title text;
+  group_member_ids uuid[];
+  group_member_count integer;
+  matched_member_count integer;
 begin
   if uid is null then
     raise exception 'UNAUTHORIZED';
@@ -526,6 +530,67 @@ begin
     ) m;
     if result is null then raise exception 'NOT_FOUND'; end if;
     return result;
+
+  elsif action = 'GROUP_CREATE' then
+    group_title := btrim(payload->>'title');
+    if group_title is null or length(group_title) not between 1 and 80 then
+      raise exception 'INVALID_INPUT';
+    end if;
+
+    select coalesce(array_agg(value::uuid), '{}'::uuid[])
+      into group_member_ids
+    from jsonb_array_elements_text(coalesce(payload->'member_ids', '[]'::jsonb));
+
+    group_member_count := cardinality(group_member_ids);
+    if group_member_count not between 2 and 20 then
+      raise exception 'INVALID_INPUT';
+    end if;
+
+    if uid = any(group_member_ids) then
+      raise exception 'INVALID_INPUT';
+    end if;
+
+    if (
+      select count(distinct member_id)
+      from unnest(group_member_ids) as member_id
+    ) <> group_member_count then
+      raise exception 'INVALID_INPUT';
+    end if;
+
+    select count(*) into matched_member_count
+    from unnest(group_member_ids) as member_id
+    where exists (
+      select 1
+      from public.buddy_matches bm
+      where
+        (bm.user_1 = uid and bm.user_2 = member_id)
+        or
+        (bm.user_2 = uid and bm.user_1 = member_id)
+    );
+
+    if matched_member_count <> group_member_count then
+      raise exception 'NOT_MATCHED';
+    end if;
+
+    insert into public.conversations (type, title, created_by)
+    values ('GROUP', group_title, uid)
+    returning id into new_conv_id;
+
+    insert into public.conversation_participants (conversation_id, user_id, role)
+    values (new_conv_id, uid, 'OWNER');
+
+    insert into public.conversation_participants (conversation_id, user_id, role)
+    select new_conv_id, member_id, 'MEMBER'
+    from unnest(group_member_ids) as member_id
+    on conflict (conversation_id, user_id) do nothing;
+
+    return jsonb_build_object(
+      'id', new_conv_id,
+      'conversation_id', new_conv_id,
+      'type', 'GROUP',
+      'title', group_title,
+      'member_count', group_member_count + 1
+    );
 
   end if;
 
