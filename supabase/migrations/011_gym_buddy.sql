@@ -24,15 +24,15 @@ create table if not exists public.conversation_participants (
 );
 create index if not exists conversation_participants_user_idx on public.conversation_participants(user_id, conversation_id);
 
-create or replace function public.gymflow_is_conversation_member(target_conv_id uuid, check_user_id uuid)
+create or replace function public.gymflow_is_conversation_member(target_conv_id uuid)
 returns boolean language sql security definer stable set search_path = '' as $$
   select exists(
     select 1 from public.conversation_participants
-    where conversation_id = target_conv_id and user_id = check_user_id
+    where conversation_id = target_conv_id and user_id = auth.uid()
   );
 $$;
-revoke all on function public.gymflow_is_conversation_member(uuid, uuid) from public, anon;
-grant execute on function public.gymflow_is_conversation_member(uuid, uuid) to authenticated;
+revoke all on function public.gymflow_is_conversation_member(uuid) from public, anon;
+grant execute on function public.gymflow_is_conversation_member(uuid) to authenticated;
 
 alter table public.conversation_participants enable row level security;
 revoke all on public.conversation_participants from anon, authenticated;
@@ -42,8 +42,7 @@ drop policy if exists conversation_participants_read on public.conversation_part
 create policy conversation_participants_read on public.conversation_participants for select to authenticated
   using (
     user_id = auth.uid()
-    or public.gymflow_is_conversation_member(conversation_id, auth.uid())
-    or exists (select 1 from public.users where id = auth.uid() and role = 'ADMIN')
+    or public.gymflow_is_conversation_member(conversation_id)
   );
 
 -- Update RLS on conversations and messages to allow DIRECT / GROUP members to access their chat.
@@ -52,7 +51,7 @@ create policy conversations_read on public.conversations for select to authentic
   using (
     (type = 'SUPPORT' and (user_id = auth.uid() or exists(select 1 from public.users where id = auth.uid() and role = 'ADMIN')))
     or
-    (type in ('DIRECT', 'GROUP') and public.gymflow_is_conversation_member(id, auth.uid()))
+    (type in ('DIRECT', 'GROUP') and public.gymflow_is_conversation_member(id))
   );
 
 drop policy if exists messages_read on public.messages;
@@ -64,7 +63,7 @@ create policy messages_read on public.messages for select to authenticated
       and (
         (c.type = 'SUPPORT' and (c.user_id = auth.uid() or exists(select 1 from public.users where id = auth.uid() and role = 'ADMIN')))
         or
-        (c.type in ('DIRECT', 'GROUP') and public.gymflow_is_conversation_member(c.id, auth.uid()))
+        (c.type in ('DIRECT', 'GROUP') and public.gymflow_is_conversation_member(c.id))
       )
     )
   );
@@ -153,26 +152,37 @@ create table if not exists public.buddy_profiles (
   user_id uuid primary key references public.users(id) on delete cascade,
   enabled boolean not null default true,
   age smallint null check (age is null or (age >= 16 and age <= 100)),
-  gender text null,
+  gender text null check (gender is null or length(gender) <= 50),
   show_age boolean not null default true,
   show_gender boolean not null default true,
-  fitness_goal text null,
+  fitness_goal text null check (fitness_goal is null or length(fitness_goal) <= 200),
   experience_level text null check (experience_level is null or experience_level in ('BEGINNER', 'INTERMEDIATE', 'ADVANCED')),
-  favorite_workouts text[] not null default '{}',
-  preferred_workout_times text[] not null default '{}',
-  workout_style text[] not null default '{}',
-  bio text null,
+  favorite_workouts text[] not null default '{}' check (cardinality(favorite_workouts) <= 20),
+  preferred_workout_times text[] not null default '{}' check (cardinality(preferred_workout_times) <= 20),
+  workout_style text[] not null default '{}' check (cardinality(workout_style) <= 20),
+  bio text null check (bio is null or length(bio) <= 1000),
   onboarding_completed boolean not null default false,
   looking_for_partner boolean not null default false,
   partner_date date null,
   partner_start_time time null,
   partner_end_time time null,
-  partner_workout text null,
+  partner_workout text null check (partner_workout is null or length(partner_workout) <= 200),
   partner_gym_id text null references public.gyms(id) on delete set null,
-  partner_note text null,
+  partner_note text null check (partner_note is null or length(partner_note) <= 1000),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  check (partner_start_time is null or partner_end_time is null or partner_end_time > partner_start_time)
+  check (partner_start_time is null or partner_end_time is null or partner_end_time > partner_start_time),
+  check (
+    not looking_for_partner
+    or (
+      partner_date is not null
+      and partner_start_time is not null
+      and partner_end_time is not null
+      and partner_workout is not null
+      and length(btrim(partner_workout)) between 1 and 200
+      and partner_gym_id is not null
+    )
+  )
 );
 
 create index if not exists buddy_profiles_feed_idx on public.buddy_profiles(enabled, onboarding_completed, looking_for_partner, updated_at desc);
@@ -295,6 +305,49 @@ begin
     return result;
 
   elsif action = 'PROFILE_UPSERT' then
+    if length(coalesce(payload->>'gender', '')) > 50
+      or length(coalesce(payload->>'fitness_goal', '')) > 200
+      or length(coalesce(payload->>'bio', '')) > 1000
+      or length(coalesce(payload->>'partner_workout', '')) > 200
+      or length(coalesce(payload->>'partner_note', '')) > 1000 then
+      raise exception 'INVALID_INPUT';
+    end if;
+
+    if jsonb_typeof(coalesce(payload->'favorite_workouts', '[]'::jsonb)) <> 'array'
+      or jsonb_array_length(coalesce(payload->'favorite_workouts', '[]'::jsonb)) > 20
+      or exists (
+        select 1
+        from jsonb_array_elements(coalesce(payload->'favorite_workouts', '[]'::jsonb)) as item(value)
+        where jsonb_typeof(value) <> 'string' or length(value #>> '{}') > 100
+      )
+      or jsonb_typeof(coalesce(payload->'preferred_workout_times', '[]'::jsonb)) <> 'array'
+      or jsonb_array_length(coalesce(payload->'preferred_workout_times', '[]'::jsonb)) > 20
+      or exists (
+        select 1
+        from jsonb_array_elements(coalesce(payload->'preferred_workout_times', '[]'::jsonb)) as item(value)
+        where jsonb_typeof(value) <> 'string' or length(value #>> '{}') > 100
+      )
+      or jsonb_typeof(coalesce(payload->'workout_style', '[]'::jsonb)) <> 'array'
+      or jsonb_array_length(coalesce(payload->'workout_style', '[]'::jsonb)) > 20
+      or exists (
+        select 1
+        from jsonb_array_elements(coalesce(payload->'workout_style', '[]'::jsonb)) as item(value)
+        where jsonb_typeof(value) <> 'string' or length(value #>> '{}') > 100
+      ) then
+      raise exception 'INVALID_INPUT';
+    end if;
+
+    if coalesce((payload->>'looking_for_partner')::boolean, false)
+      and (
+        nullif(payload->>'partner_date', '') is null
+        or nullif(payload->>'partner_start_time', '') is null
+        or nullif(payload->>'partner_end_time', '') is null
+        or nullif(btrim(payload->>'partner_workout'), '') is null
+        or nullif(btrim(payload->>'partner_gym_id'), '') is null
+      ) then
+      raise exception 'INVALID_INPUT';
+    end if;
+
     if payload ? 'partner_gym_id' and payload->>'partner_gym_id' is not null and btrim(payload->>'partner_gym_id') <> '' then
       if not exists (select 1 from public.gyms where id = payload->>'partner_gym_id' and is_active = true) then
         raise exception 'GYM_NOT_FOUND';
@@ -437,6 +490,15 @@ begin
       raise exception 'NOT_FOUND';
     end if;
 
+    u1 := least(uid, target_user);
+    u2 := greatest(uid, target_user);
+
+    perform 1
+    from public.users
+    where id in (u1, u2)
+    order by id
+    for update;
+
     insert into public.buddy_swipes (swiper_id, target_id, action, updated_at)
     values (uid, target_user, swipe_action, now())
     on conflict (swiper_id, target_id) do update set
@@ -455,9 +517,6 @@ begin
     if not has_reciprocal then
       return jsonb_build_object('matched', false, 'action', 'LIKE');
     end if;
-
-    u1 := least(uid, target_user);
-    u2 := greatest(uid, target_user);
 
     select * into match_rec from public.buddy_matches where user_1 = u1 and user_2 = u2;
     if found then
