@@ -38,5 +38,15 @@ class BuddyService {
         .map((e) => BuddyMatch.fromJson(Map<String, dynamic>.from(e as Map)))
         .toList();
   }
+
+  Future<Map<String, dynamic>> createGroup(
+    String title,
+    List<String> memberIds,
+  ) async {
+    return ApiClient.postJson('/buddy/groups', {
+      'title': title,
+      'member_ids': memberIds,
+    });
+  }
 }
 
