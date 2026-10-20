@@ -54,6 +54,7 @@ const businessErrors = {
   GYM_NOT_FOUND: [404, 'Cơ sở không tồn tại hoặc đang ngừng hoạt động.'],
   OPEN_SESSION: [409, 'Hãy check-out trước khi đổi cơ sở tập.'],
   CANNOT_SWIPE_SELF: [400, 'Không thể tự kết nối với chính mình.'],
+  NOT_MATCHED: [409, 'Chỉ có thể thêm Gym Buddy đã match với bạn.'],
 };
 async function workflow(client, name, action, payload = {}) {
   const result = await client.rpc(name, { action, payload });
