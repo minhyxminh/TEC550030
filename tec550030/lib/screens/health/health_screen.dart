@@ -4,17 +4,25 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../models/bmi_result.dart';
 import '../../models/health_guidance.dart';
+import '../../models/mascot_mood.dart';
 import '../../models/weight_entry.dart';
 import '../../services/auth_service.dart';
+import '../../services/gympoint_service.dart';
 import '../../services/health_service.dart';
 import '../../core/formatters.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_text_styles.dart';
+import '../../widgets/ambient.dart';
+import '../../widgets/app_button.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/bmi_scale.dart';
+import '../../widgets/decor.dart';
 import '../../widgets/health_measurement_sheet.dart';
 import '../../widgets/weight_history_chart.dart';
 import '../../widgets/error_state.dart';
 import '../../widgets/loading_view.dart';
+import '../../widgets/mascot.dart';
 
 class HealthScreen extends StatefulWidget {
   const HealthScreen({super.key});
@@ -27,6 +35,7 @@ class _HealthScreenState extends State<HealthScreen> {
   String? _userId, _error;
   BmiResult? _result;
   List<WeightEntry> _weights = [];
+  int _weeklyCheckins = 0;
   bool _loading = true, _saving = false, _editing = false;
   @override
   void initState() {
@@ -42,9 +51,18 @@ class _HealthScreenState extends State<HealthScreen> {
     try {
       final user = await AuthService().getCurrentUser();
       final overview = await _service.overview(user.id);
+      var weekly = 0;
+      try {
+        weekly = weeklyCheckinDays(
+          await GymPointService().getHistory(limit: 30),
+        );
+      } catch (_) {
+        /* Activity only refines the mascot; health data still loads. */
+      }
       if (!mounted) return;
       setState(() {
         _userId = user.id;
+        _weeklyCheckins = weekly;
         _result = overview.result;
         _weights = overview.weights;
         _loading = false;
@@ -109,40 +127,94 @@ class _HealthScreenState extends State<HealthScreen> {
     }
   }
 
-  Widget _heading(String title, String action, VoidCallback tap) => Padding(
+  Widget _heading(
+    String title,
+    String action,
+    VoidCallback tap, {
+    bool primary = true,
+  }) => Padding(
     padding: const EdgeInsets.only(bottom: 12),
-    child: Row(
+    // Wraps the button below the title on narrow screens or large text.
+    child: Wrap(
+      alignment: WrapAlignment.spaceBetween,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: 12,
+      runSpacing: 8,
       children: [
-        Expanded(
-          child: Text(
-            title,
-            style: const TextStyle(fontSize: 23, fontWeight: FontWeight.w800),
-          ),
-        ),
-        FilledButton(onPressed: _saving ? null : tap, child: Text(action)),
+        Text(title, style: AppTextStyles.heading1.copyWith(fontSize: 22)),
+        primary
+            ? FilledButton.icon(
+                onPressed: _saving ? null : tap,
+                icon: const Icon(Icons.add_rounded, size: 20),
+                label: Text(action),
+              )
+            : OutlinedButton.icon(
+                onPressed: _saving ? null : tap,
+                icon: const Icon(Icons.edit_outlined, size: 18),
+                label: Text(action),
+              ),
       ],
     ),
   );
-  Widget _metric(String label, String value) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Text(
-        label,
-        style: const TextStyle(color: AppColors.secondaryText, fontSize: 12),
-      ),
-      const SizedBox(height: 4),
-      Text(
-        value,
-        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
-      ),
-    ],
+  Widget _metric(
+    String label,
+    String value,
+    IconData icon,
+    Color tint,
+    Color background,
+  ) => AppCard(
+    padding: const EdgeInsets.all(12),
+    radius: AppRadius.md + 2,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        IconTile(icon, color: tint, background: background, size: 30),
+        const SizedBox(height: 10),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(label, style: AppTextStyles.caption, maxLines: 1),
+        ),
+        const SizedBox(height: 2),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(value, style: AppTextStyles.title.copyWith(fontSize: 17)),
+        ),
+      ],
+    ),
   );
   Color get _bmiColor => [
-    const Color(0xFF3B82F6),
+    AppColors.info,
     AppColors.success,
-    AppColors.primaryOrange,
+    AppColors.warning,
     AppColors.error,
   ][_result!.categoryIndex];
+
+  MascotMood get _mood =>
+      moodForHealth(_result, weeklyCheckins: _weeklyCheckins);
+
+  Widget _mascotCard() => HighlightCard(
+    color: moodSoftColor(_mood),
+    glow: moodColor(_mood),
+    seed: _mood.index + 2,
+    padding: const EdgeInsets.fromLTRB(8, 12, 16, 0),
+    child: MascotMessage(
+      key: const ValueKey('health-mascot'),
+      mood: _mood,
+      mascotWidth: 128,
+      action: _result == null
+          ? FilledButton.icon(
+              onPressed: _saving ? null : () => _edit(),
+              icon: const Icon(Icons.edit_note_rounded, size: 20),
+              label: const Text('Nhập chỉ số ngay'),
+            )
+          : Text(
+              'Tuần này: ${_weeklyCheckins.clamp(0, 7)}/$weeklyCheckinGoal buổi tập',
+              style: AppTextStyles.caption,
+            ),
+    ),
+  );
   Widget _weightCard() {
     final latest = _weights.isEmpty ? null : _weights.last;
     final highest = _weights.isEmpty
@@ -151,52 +223,186 @@ class _HealthScreenState extends State<HealthScreen> {
     final lowest = _weights.isEmpty
         ? null
         : _weights.map((e) => e.weightKg).reduce(math.min);
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Cân nặng hiện tại',
-            style: TextStyle(color: AppColors.secondaryText),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            latest == null
-                ? 'Chưa có lần đo'
-                : '${latest.weightKg.toStringAsFixed(1)} kg',
-            style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w800),
-          ),
-          if (latest != null) ...[
-            Text(
-              'Cập nhật ${formatDate(latest.measuredAt.toUtc().add(const Duration(hours: 7)))}',
-              style: const TextStyle(
-                color: AppColors.secondaryText,
-                fontSize: 12,
+    final change = latest == null
+        ? 0.0
+        : latest.weightKg - _weights.first.weightKg;
+    final number = AppTextStyles.display.copyWith(
+      color: Colors.white,
+      fontSize: 60,
+      height: 1,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Stack(
+          clipBehavior: Clip.none,
+          children: [
+            RingFrame(
+              child: HighlightCard(
+                color: AppColors.ink,
+                glow: AppColors.purple,
+                seed: 6,
+                bubbleIntensity: 0.4,
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 22),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.monitor_weight_outlined,
+                          size: 18,
+                          color: AppColors.purple,
+                        ),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            'Cân nặng hiện tại',
+                            style: AppTextStyles.title.copyWith(
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                        if (latest != null) ...[
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: InkChip(
+                              'Cập nhật ${formatDate(latest.measuredAt.toUtc().add(const Duration(hours: 7)))}',
+                              background: AppColors.inkSoft,
+                              foreground: Colors.white70,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: latest == null
+                          ? Text(
+                              'Chưa có lần đo',
+                              style: number.copyWith(fontSize: 34),
+                            )
+                          : Text.rich(
+                              TextSpan(
+                                children: [
+                                  TextSpan(
+                                    text: latest.weightKg.toStringAsFixed(1),
+                                  ),
+                                  TextSpan(
+                                    text: ' kg',
+                                    style: number.copyWith(
+                                      fontSize: 24,
+                                      color: AppColors.primaryOrange,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              style: number,
+                            ),
+                    ),
+                    const SizedBox(height: 14),
+                    const RulerTicks(),
+                    const SizedBox(height: 18),
+                    AppButton(
+                      text: 'Ghi cân nặng',
+                      icon: Icons.add_rounded,
+                      leadingIcon: true,
+                      isLoading: _saving,
+                      onPressed: () => _edit(weightOnly: true),
+                    ),
+                  ],
+                ),
               ),
             ),
-            const SizedBox(height: 18),
-            Wrap(
-              spacing: 28,
-              runSpacing: 14,
-              children: [
-                _metric('Cao nhất', '${highest!.toStringAsFixed(1)} kg'),
-                _metric('Thấp nhất', '${lowest!.toStringAsFixed(1)} kg'),
-                _metric(
-                  'So với lần đầu',
-                  '${latest.weightKg - _weights.first.weightKg > 0 ? '+' : ''}${(latest.weightKg - _weights.first.weightKg).toStringAsFixed(1)} kg',
-                ),
-              ],
-            ),
+            const Positioned(right: -2, top: -14, child: HeartSticker()),
           ],
-          const SizedBox(height: 22),
-          WeightHistoryChart(entries: _weights),
-          const SizedBox(height: 8),
-          const Text(
-            'Mỗi ngày giữ lần đo mới nhất · Biểu đồ tối đa 30 lần đo gần đây',
-            style: TextStyle(fontSize: 11, color: AppColors.secondaryText),
+        ),
+        if (latest != null) ...[
+          const SizedBox(height: 16),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: _metric(
+                  'Cao nhất',
+                  '${highest!.toStringAsFixed(1)} kg',
+                  Icons.arrow_upward_rounded,
+                  AppColors.strongOrange,
+                  AppColors.peach,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _metric(
+                  'Thấp nhất',
+                  '${lowest!.toStringAsFixed(1)} kg',
+                  Icons.arrow_downward_rounded,
+                  AppColors.info,
+                  AppColors.infoSoft,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _metric(
+                  'So với lần đầu',
+                  '${change > 0 ? '+' : ''}${change.toStringAsFixed(1)} kg',
+                  Icons.south_east_rounded,
+                  AppColors.success,
+                  AppColors.mint,
+                ),
+              ),
+            ],
           ),
         ],
-      ),
+        const SizedBox(height: 16),
+        AppCard(
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(
+                alignment: WrapAlignment.spaceBetween,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 6,
+                children: [
+                  Text('Biểu đồ cân nặng', style: AppTextStyles.heading2),
+                  const InkChip(
+                    '30 lần đo gần nhất',
+                    background: AppColors.field,
+                    foreground: AppColors.secondaryText,
+                  ),
+                ],
+              ),
+              WeightHistoryChart(entries: _weights),
+              const SizedBox(height: 6),
+              const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: EdgeInsets.only(top: 1),
+                    child: Icon(
+                      Icons.info_outline_rounded,
+                      size: 16,
+                      color: AppColors.secondaryText,
+                    ),
+                  ),
+                  SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Mỗi ngày giữ lần đo mới nhất · Biểu đồ tối đa 30 lần đo gần đây',
+                      style: AppTextStyles.caption,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -207,24 +413,19 @@ class _HealthScreenState extends State<HealthScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(
+            const IconTile(
               Icons.monitor_weight_outlined,
-              color: AppColors.primaryOrange,
-              size: 36,
+              background: AppColors.peach,
+              size: 48,
             ),
             const SizedBox(height: 12),
             const Text(
               'Hiểu cơ thể qua từng chỉ số',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+              style: AppTextStyles.heading2,
             ),
             const SizedBox(height: 8),
             const Text(
               'Thêm cân nặng, chiều cao và tuổi để xem BMI cùng gợi ý phù hợp.',
-            ),
-            const SizedBox(height: 16),
-            OutlinedButton(
-              onPressed: () => _edit(),
-              child: const Text('Thêm chỉ số đầu tiên'),
             ),
           ],
         ),
@@ -240,12 +441,18 @@ class _HealthScreenState extends State<HealthScreen> {
             spacing: 16,
             runSpacing: 8,
             children: [
-              Text(
-                result.bmi.toStringAsFixed(1),
-                style: const TextStyle(
-                  fontSize: 44,
-                  fontWeight: FontWeight.w800,
-                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('BMI', style: AppTextStyles.overline),
+                  Text(
+                    result.bmi.toStringAsFixed(1),
+                    style: AppTextStyles.display.copyWith(
+                      fontSize: 52,
+                      color: _bmiColor,
+                    ),
+                  ),
+                ],
               ),
               Container(
                 padding: const EdgeInsets.symmetric(
@@ -253,51 +460,94 @@ class _HealthScreenState extends State<HealthScreen> {
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: _bmiColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(24),
+                  color: result.categoryIndex == 1
+                      ? AppColors.mint
+                      : _bmiColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Text(
-                  result.classification,
-                  style: TextStyle(
-                    color: _bmiColor,
-                    fontWeight: FontWeight.w600,
-                  ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      result.categoryIndex == 1
+                          ? Icons.check_rounded
+                          : Icons.info_outline_rounded,
+                      size: 18,
+                      color: _bmiColor,
+                    ),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        result.classification,
+                        style: AppTextStyles.title.copyWith(
+                          color: _bmiColor,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
           const SizedBox(height: 16),
           BmiScale(bmi: result.bmi),
-          const SizedBox(height: 12),
-          const Divider(),
-          const SizedBox(height: 8),
+          const SizedBox(height: 16),
           _measurementRow(
             'Chiều cao',
             '${result.heightCm.toStringAsFixed(0)} cm',
-            Icons.height,
+            Icons.height_rounded,
+            AppColors.purple,
+            AppColors.lavender,
           ),
           _measurementRow(
             'Cân nặng',
             '${result.weightKg.toStringAsFixed(1)} kg',
             Icons.monitor_weight_outlined,
+            AppColors.strongOrange,
+            AppColors.peach,
           ),
-          _measurementRow('Tuổi', '${result.age}', Icons.person_outline),
-          const SizedBox(height: 8),
-          const Text(
-            'BMI tham khảo cho người từ 20 tuổi. Không phản ánh riêng lượng cơ, mỡ hay các thay đổi trong thai kỳ.',
-            style: TextStyle(fontSize: 12, color: AppColors.secondaryText),
+          _measurementRow(
+            'Tuổi',
+            '${result.age}',
+            Icons.cake_outlined,
+            AppColors.success,
+            AppColors.mint,
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.field,
+              borderRadius: BorderRadius.circular(AppRadius.sm),
+            ),
+            child: const Text(
+              'BMI tham khảo cho người từ 20 tuổi. Không phản ánh riêng lượng cơ, mỡ hay các thay đổi trong thai kỳ.',
+              style: AppTextStyles.caption,
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _measurementRow(String label, String value, IconData icon) => ListTile(
+  Widget _measurementRow(
+    String label,
+    String value,
+    IconData icon,
+    Color tint,
+    Color background,
+  ) => ListTile(
     contentPadding: EdgeInsets.zero,
-    leading: Icon(icon, color: AppColors.primaryOrange),
-    title: Text(label),
-    subtitle: Text(value, style: const TextStyle(fontWeight: FontWeight.w700)),
-    trailing: const Icon(Icons.edit_outlined, size: 20),
+    leading: IconTile(icon, color: tint, background: background),
+    title: Text(label, style: AppTextStyles.caption.copyWith(fontSize: 13)),
+    subtitle: Text(value, style: AppTextStyles.title.copyWith(fontSize: 16)),
+    trailing: const IconTile(
+      Icons.edit_outlined,
+      color: AppColors.ink,
+      background: AppColors.field,
+      size: 38,
+    ),
     onTap: _saving ? null : () => _edit(),
   );
   List<Widget> _guidance() {
@@ -311,25 +561,20 @@ class _HealthScreenState extends State<HealthScreen> {
     ];
     return [
       const SizedBox(height: 28),
-      const Text(
+      Text(
         'Gợi ý sức khỏe',
-        style: TextStyle(fontSize: 23, fontWeight: FontWeight.w800),
+        style: AppTextStyles.heading1.copyWith(fontSize: 22),
       ),
       const SizedBox(height: 12),
-      AppCard(
+      HighlightCard(
+        gradient: AppColors.brandGradient,
+        seed: 9,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              guidance.title,
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppColors.deepOrange,
-              ),
-            ),
+            Text(guidance.title, style: AppTextStyles.heading2),
             const SizedBox(height: 8),
-            Text(guidance.summary),
+            Text(guidance.summary, style: AppTextStyles.body),
           ],
         ),
       ),
@@ -343,24 +588,22 @@ class _HealthScreenState extends State<HealthScreen> {
               children: [
                 Row(
                   children: [
-                    Icon(icons[i], color: AppColors.primaryOrange),
+                    IconTile(
+                      icons[i],
+                      color: AppColors.purple,
+                      background: AppColors.lavender,
+                    ),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
                         guidance.tips[i].title,
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: AppTextStyles.heading2,
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
-                Text(
-                  guidance.tips[i].content,
-                  style: const TextStyle(height: 1.55),
-                ),
+                Text(guidance.tips[i].content, style: AppTextStyles.body),
               ],
             ),
           ),
@@ -369,51 +612,58 @@ class _HealthScreenState extends State<HealthScreen> {
       const SizedBox(height: 16),
       Text(
         'Gợi ý tham khảo, không phải chẩn đoán. Nội dung thay đổi theo BMI ${_result!.bmi.toStringAsFixed(1)}; mức vận động và nhu cầu ăn uống còn tùy sức khỏe thực tế.',
-        style: const TextStyle(fontSize: 12, color: AppColors.secondaryText),
+        style: AppTextStyles.caption,
       ),
       const SizedBox(height: 8),
       const Text(
         'Nguồn: CDC (BMI, vận động) · NHS (dinh dưỡng, kiểm soát cân nặng)',
-        style: TextStyle(fontSize: 11, color: AppColors.secondaryText),
+        style: AppTextStyles.caption,
       ),
     ];
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Sức khỏe')),
-    body: _loading
-        ? const LoadingView()
-        : _error != null
-        ? ErrorState(message: _error!, onRetry: _load)
-        : Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 820),
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 112),
-                children: [
-                  const Text(
-                    'Theo dõi thay đổi, chăm sóc bản thân',
-                    style: TextStyle(color: AppColors.secondaryText),
+    body: PageBackdrop(
+      topBlob: AppColors.mint,
+      child: SafeArea(
+        bottom: false,
+        child: _loading
+            ? const LoadingView()
+            : _error != null
+            ? ErrorState(message: _error!, onRetry: _load)
+            : Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 820),
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(
+                      20,
+                      16,
+                      20,
+                      AppSpacing.navClearance,
+                    ),
+                    children: [
+                      const PageHeader(
+                        title: 'Sức khỏe',
+                        subtitle: 'Theo dõi thay đổi, chăm sóc bản thân',
+                      ),
+                      _weightCard(),
+                      const SizedBox(height: 26),
+                      _mascotCard(),
+                      const SizedBox(height: 20),
+                      _heading(
+                        'Chỉ số hiện tại',
+                        _result == null ? 'Tính BMI' : 'Chỉnh sửa',
+                        () => _edit(),
+                        primary: false,
+                      ),
+                      _bmiCard(),
+                      if (_result != null) ..._guidance(),
+                    ],
                   ),
-                  const SizedBox(height: 20),
-                  _heading(
-                    'Cân nặng',
-                    'Ghi cân nặng',
-                    () => _edit(weightOnly: true),
-                  ),
-                  _weightCard(),
-                  const SizedBox(height: 26),
-                  _heading(
-                    'BMI',
-                    _result == null ? 'Tính BMI' : 'Chỉnh sửa',
-                    () => _edit(),
-                  ),
-                  _bmiCard(),
-                  if (_result != null) ..._guidance(),
-                ],
+                ),
               ),
-            ),
-          ),
+      ),
+    ),
   );
 }

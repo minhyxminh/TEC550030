@@ -48,12 +48,10 @@ const businessErrors = {
   PENDING_ORDER_EXISTS: [409, 'Bạn đã có đơn gói tập chờ duyệt.'],
   INVALID_SLOT: [400, 'Chọn giờ tròn từ 06:00 đến 21:00 trong 30 ngày tới.'],
   BOOKING_STARTED: [409, 'Buổi tập đã bắt đầu, không thể hủy.'], ORDER_PROCESSED: [409, 'Đơn này đã được xử lý.'],
-  GYM_NOT_FOUND: [404, 'Cơ sở không tồn tại hoặc đang ngừng hoạt động.'],
-  OPEN_SESSION: [409, 'Hãy check-out trước khi đổi cơ sở tập.'],
   CANNOT_SWIPE_SELF: [400, 'Không thể tự kết nối với chính mình.'],
   NOT_MATCHED: [409, 'Chỉ có thể thêm Gym Buddy đã match với bạn.'],
   PAYMENT_REQUIRED: [409, 'Đơn thanh toán phải được xác nhận đã nhận tiền trước khi kích hoạt.'],
-  PAYMENT_NOT_CONFIGURED: [409, 'Gói tập này chưa được cấu hình số tiền thanh toán demo.'],
+  PAYMENT_NOT_CONFIGURED: [409, 'Gói tập này chưa được cấu hình số tiền thanh toán.'],
 };
 async function workflow(client, name, action, payload = {}) {
   const result = await client.rpc(name, { action, payload });

@@ -189,7 +189,9 @@ void main() {
         ),
       );
 
+      await scrollTo(tester, find.text('Leg Day'));
       await tester.tap(find.text('Leg Day'));
+      await scrollTo(tester, find.text('Chest'));
       await tester.tap(find.text('Chest'));
       await tester.pumpAndSettle();
 
@@ -391,6 +393,7 @@ void main() {
       );
 
       await tester.tap(find.text('Tăng cơ'));
+      await scrollTo(tester, find.text('Chest'));
       await tester.tap(find.text('Chest'));
       await scrollTo(tester, find.text('Mới bắt đầu'));
       await tester.tap(find.text('Mới bắt đầu'));
@@ -473,6 +476,7 @@ void main() {
       );
 
       await tester.tap(find.text('Tăng cơ'));
+      await scrollTo(tester, find.text('Chest'));
       await tester.tap(find.text('Chest'));
       await scrollTo(tester, find.text('Mới bắt đầu'));
       await tester.tap(find.text('Mới bắt đầu'));
@@ -506,6 +510,7 @@ void main() {
       );
 
       await tester.tap(find.text('Tăng cơ'));
+      await scrollTo(tester, find.text('Chest'));
       await tester.tap(find.text('Chest'));
       await scrollTo(tester, find.text('Mới bắt đầu'));
       await tester.tap(find.text('Mới bắt đầu'));

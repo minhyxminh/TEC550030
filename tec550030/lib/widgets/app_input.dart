@@ -36,7 +36,10 @@ class _AppInputState extends State<AppInput> {
       children: [
         Text(
           widget.label,
-          style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+          style: AppTextStyles.caption.copyWith(
+            fontWeight: FontWeight.w700,
+            color: AppColors.secondaryText,
+          ),
         ),
         const SizedBox(height: 8),
         TextFormField(
@@ -64,35 +67,6 @@ class _AppInputState extends State<AppInput> {
                         setState(() => _showPassword = !_showPassword),
                   )
                 : null,
-            hintStyle: AppTextStyles.body.copyWith(
-              color: AppColors.secondaryText,
-            ),
-            filled: true,
-            fillColor: AppColors.white,
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 16,
-              vertical: 14,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(
-                color: AppColors.secondaryText.withValues(alpha: 0.3),
-              ),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: BorderSide(
-                color: AppColors.secondaryText.withValues(alpha: 0.3),
-              ),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: AppColors.primaryOrange),
-            ),
-            errorBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: AppColors.error),
-            ),
           ),
         ),
       ],

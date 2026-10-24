@@ -58,7 +58,7 @@ Future<void> pumpPayment(
 }
 
 void main() {
-  testWidgets('shows demo transfer amount while keeping catalogue price',
+  testWidgets('shows the transfer amount while keeping catalogue price',
       (tester) async {
     await pumpPayment(
       tester,
@@ -76,7 +76,7 @@ void main() {
     );
 
     expect(find.text('Giá gói: 300.000 ₫'), findsOneWidget);
-    expect(find.text('Thanh toán demo thực tế: 5.000 ₫'), findsOneWidget);
+    expect(find.text('Số tiền chuyển khoản demo: 5.000 ₫'), findsOneWidget);
     expect(find.text('Chưa cấu hình tài khoản nhận tiền'), findsOneWidget);
   });
 

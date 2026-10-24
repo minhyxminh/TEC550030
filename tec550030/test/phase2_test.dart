@@ -211,8 +211,13 @@ void main() {
     await ApiClient.saveSession({'access_token': 'valid-token'});
     await tester.pumpWidget(const MaterialApp(home: HealthScreen()));
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(find.text('Tính BMI'), 300);
+    await tester.scrollUntilVisible(
+      find.text('Tính BMI'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.ensureVisible(find.text('Tính BMI'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Tính BMI'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextFormField), '0');
@@ -242,9 +247,7 @@ void main() {
       await ApiClient.saveSession({'access_token': 'valid-token'});
       await tester.pumpWidget(const MaterialApp(home: MainLayout()));
       await tester.pumpAndSettle();
-      final nav = tester.widget<BottomNavigationBar>(
-        find.byType(BottomNavigationBar),
-      );
+      final nav = tester.widget<GymFlowNavBar>(find.byType(GymFlowNavBar));
       expect(nav.items.map((e) => e.label), [
         'Trang chủ',
         'Sức khỏe',
@@ -252,7 +255,7 @@ void main() {
         'Dịch vụ',
         'Tài khoản',
       ]);
-      nav.onTap!(2);
+      nav.onTap(2);
       await tester.pumpAndSettle();
       expect(find.text('Lịch sử điểm'), findsOneWidget);
       expect(find.text('80'), findsOneWidget);

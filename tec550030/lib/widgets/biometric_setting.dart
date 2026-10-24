@@ -1,10 +1,13 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../core/theme/app_colors.dart';
 import '../services/biometric_service.dart';
 import 'app_card.dart';
 
 class BiometricSetting extends StatefulWidget {
-  const BiometricSetting({super.key});
+  /// Renders as a bare row for use inside a grouped list.
+  final bool embedded;
+  const BiometricSetting({super.key, this.embedded = false});
   @override
   State<BiometricSetting> createState() => _BiometricSettingState();
 }
@@ -50,14 +53,21 @@ class _BiometricSettingState extends State<BiometricSetting> {
   }
 
   @override
-  Widget build(BuildContext context) => AppCard(
-    child: SwitchListTile(
-      contentPadding: EdgeInsets.zero,
-      secondary: const Icon(Icons.fingerprint),
+  Widget build(BuildContext context) {
+    final tile = SwitchListTile(
+      contentPadding: widget.embedded
+          ? const EdgeInsets.symmetric(horizontal: 16)
+          : EdgeInsets.zero,
+      secondary: const IconTile(
+        Icons.fingerprint_rounded,
+        color: AppColors.success,
+        background: AppColors.mint,
+      ),
       title: const Text('Mở nhanh bằng sinh trắc học'),
       subtitle: const Text('Xác thực khi mở lại phiên đã ghi nhớ.'),
       value: _enabled,
       onChanged: _busy ? null : _change,
-    ),
-  );
+    );
+    return widget.embedded ? tile : AppCard(child: tile);
+  }
 }

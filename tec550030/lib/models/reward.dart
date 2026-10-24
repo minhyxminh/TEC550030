@@ -1,3 +1,5 @@
+import 'catalogue_media.dart';
+
 class Reward {
   final String id;
   final String name;
@@ -16,13 +18,15 @@ class Reward {
   });
 
   factory Reward.fromJson(Map<String, dynamic> json) {
+    final id = json['id'] as String? ?? '';
+    final copy = rewardCopy(id);
     return Reward(
-      id: json['id'] ?? '',
-      name: json['name'] ?? '',
-      description: json['description'] ?? '',
+      id: id,
+      name: copy?.$1 ?? cleanName(json['name'] as String? ?? ''),
+      description: copy?.$2 ?? json['description'] ?? '',
       points: json['points'] ?? 0,
       stock: json['stock'] ?? 0,
-      imageUrl: json['image_url'] ?? '',
+      imageUrl: rewardImage(id, json['image_url'] as String? ?? ''),
     );
   }
 }
