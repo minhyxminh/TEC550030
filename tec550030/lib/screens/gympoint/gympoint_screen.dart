@@ -130,18 +130,16 @@ class _GymPointScreenState extends State<GymPointScreen> {
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                CircleAvatar(
-                                  backgroundColor:
-                                      (item.points > 0
-                                              ? AppColors.success
-                                              : AppColors.error)
-                                          .withValues(alpha: 0.1),
-                                  child: Icon(
-                                    item.points > 0 ? Icons.add : Icons.remove,
-                                    color: item.points > 0
-                                        ? AppColors.success
-                                        : AppColors.error,
-                                  ),
+                                IconTile(
+                                  item.points > 0
+                                      ? Icons.add_rounded
+                                      : Icons.redeem_rounded,
+                                  color: item.points > 0
+                                      ? AppColors.success
+                                      : AppColors.strongOrange,
+                                  background: item.points > 0
+                                      ? AppColors.mint
+                                      : AppColors.peach,
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(

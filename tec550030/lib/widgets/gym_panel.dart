@@ -4,15 +4,21 @@ import 'package:material_ui/material_ui.dart';
 
 import '../core/api/api_client.dart';
 import '../core/formatters.dart';
+import '../core/theme/app_colors.dart';
+import '../core/theme/app_spacing.dart';
+import '../core/theme/app_text_styles.dart';
 import '../models/occupancy.dart';
 import '../models/user.dart';
 import '../services/branch_service.dart';
 import '../models/gym_branch.dart';
+import '../models/mascot_mood.dart';
 import '../screens/home/qr_scanner_screen.dart';
 import 'app_button.dart';
 import 'app_card.dart';
 import 'catalogue_widgets.dart';
+import 'decor.dart';
 import 'hourly_occupancy_chart.dart';
+import 'mascot.dart';
 
 class GymPanel extends StatefulWidget {
   final User user;
@@ -143,7 +149,9 @@ class _GymPanelState extends State<GymPanel> {
     });
     try {
       String message;
+      var mood = MascotMood.celebrate;
       if (sessionId != null) {
+        mood = MascotMood.tired;
         await ApiClient.postJson('/gym/check-out', {'session_id': sessionId});
         _session = null;
         message = 'Đã check-out. Hẹn gặp lại bạn!';
@@ -158,8 +166,7 @@ class _GymPanelState extends State<GymPanel> {
       }
       await _load();
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(message)));
+      showMascotToast(context, mood: mood, message: message);
       widget.onChanged?.call();
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());
@@ -175,11 +182,32 @@ class _GymPanelState extends State<GymPanel> {
       children: [
         Row(
           children: [
+            Container(
+              margin: const EdgeInsets.only(right: 14, bottom: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(14),
+                boxShadow: AppShadows.block,
+              ),
+              child: const IconTile(
+                Icons.location_on_outlined,
+                color: AppColors.ink,
+                background: AppColors.primaryOrange,
+                size: 46,
+              ),
+            ),
             const Expanded(child: SectionTitle('Phòng tập hôm nay')),
-            IconButton(
-              onPressed: _load,
-              icon: const Icon(Icons.refresh),
-              tooltip: 'Cập nhật phòng tập',
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: IconButton.filledTonal(
+                style: IconButton.styleFrom(
+                  backgroundColor: AppColors.lavender,
+                  foregroundColor: AppColors.ink,
+                  fixedSize: const Size(44, 44),
+                ),
+                onPressed: _load,
+                icon: const Icon(Icons.refresh_rounded),
+                tooltip: 'Cập nhật phòng tập',
+              ),
             ),
           ],
         ),
@@ -193,21 +221,55 @@ class _GymPanelState extends State<GymPanel> {
         if (_occupancy != null)
           Text(
             '$_occupancy người đang tập',
-            style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            style: const TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              color: AppColors.primaryOrange,
+            ),
           ),
         const SizedBox(height: 8),
-        Text(
-          _session == null
-              ? widget.canCheckIn
-                    ? 'Quét QR tại ${_branchName ?? 'cơ sở đã chọn'} để bắt đầu buổi tập.'
-                    : widget.gymId == null
-                    ? 'Chọn cơ sở tập để tiếp tục.'
-                    : 'Chọn gói tập để bắt đầu check-in.'
-              : 'Đang tập từ ${formatDateTime(DateTime.parse(_session!['check_in_at']))}',
+        DashedBox(
+          onTap: _session == null && !widget.canCheckIn ? widget.onJoin : null,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+            child: Row(
+              children: [
+                Icon(
+                  _session != null
+                      ? Icons.timer_outlined
+                      : widget.canCheckIn
+                      ? Icons.qr_code_scanner_rounded
+                      : Icons.search_rounded,
+                  size: 20,
+                  color: AppColors.secondaryText,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    _session == null
+                        ? widget.canCheckIn
+                              ? 'Quét QR tại ${_branchName ?? 'cơ sở đã chọn'} để bắt đầu buổi tập.'
+                              : widget.gymId == null
+                              ? 'Chọn cơ sở tập để tiếp tục.'
+                              : 'Chọn gói tập để bắt đầu check-in.'
+                        : 'Đang tập từ ${formatDateTime(DateTime.parse(_session!['check_in_at']))}',
+                    style: AppTextStyles.body.copyWith(
+                      color: AppColors.secondaryText,
+                    ),
+                  ),
+                ),
+                if (_session == null && !widget.canCheckIn)
+                  const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: AppColors.secondaryText,
+                  ),
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: 16),
         if (_error != null) ...[
-          Text(_error!, style: const TextStyle(color: Colors.red)),
+          Text(_error!, style: const TextStyle(color: AppColors.error)),
           const SizedBox(height: 12),
         ],
         AppButton(
@@ -217,6 +279,10 @@ class _GymPanelState extends State<GymPanel> {
               ? 'Quét QR check-in'
               : 'Tham gia',
           isLoading: _busy,
+          dark: true,
+          icon: _session == null && !widget.canCheckIn
+              ? Icons.arrow_forward_rounded
+              : null,
           onPressed: _session != null || widget.canCheckIn
               ? () => _act()
               : widget.onJoin,
@@ -228,10 +294,29 @@ class _GymPanelState extends State<GymPanel> {
           ),
         const SizedBox(height: 20),
         if (!widget.canCheckIn)
-          Text(
-            widget.gymId == null
-                ? 'Chọn cơ sở để xem occupancy.'
-                : 'Chọn gói tập đang hoạt động để xem occupancy.',
+          Row(
+            children: [
+              Expanded(
+                child: Container(
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: AppColors.field,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Flexible(
+                flex: 2,
+                child: Text(
+                  widget.gymId == null
+                      ? 'Chọn cơ sở để xem occupancy.'
+                      : 'Chọn gói tập đang hoạt động để xem occupancy.',
+                  textAlign: TextAlign.end,
+                  style: AppTextStyles.caption,
+                ),
+              ),
+            ],
           )
         else ...[
           const Text('Số người có mặt trong từng giờ · giờ Việt Nam'),

@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../core/theme/app_spacing.dart';
 import 'error_state.dart';
 import 'loading_view.dart';
 import '../services/workflow_service.dart';
@@ -8,7 +9,13 @@ import '../services/workflow_service.dart';
 class DataView<T> extends StatefulWidget {
   final Future<T> Function() load;
   final List<Widget> Function(BuildContext, T) builder;
-  const DataView({super.key, required this.load, required this.builder});
+  final EdgeInsetsGeometry? padding;
+  const DataView({
+    super.key,
+    required this.load,
+    required this.builder,
+    this.padding,
+  });
   @override
   State<DataView<T>> createState() => _DataViewState<T>();
 }
@@ -65,7 +72,14 @@ class _DataViewState<T> extends State<DataView<T>> {
               onRefresh: _reload,
               child: ListView(
                 physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(20),
+                padding:
+                    widget.padding ??
+                    const EdgeInsets.fromLTRB(
+                      20,
+                      8,
+                      20,
+                      AppSpacing.navClearance,
+                    ),
                 children: _error != null
                     ? [
                         SizedBox(

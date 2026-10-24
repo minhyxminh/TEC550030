@@ -4,8 +4,11 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/formatters.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_spacing.dart';
+import '../../core/theme/app_text_styles.dart';
 import '../../services/chat_service.dart';
 import '../../services/workflow_service.dart';
+import '../../widgets/brand.dart';
 import '../../widgets/loading_view.dart';
 
 class ConversationScreen extends StatefulWidget {
@@ -162,12 +165,49 @@ class _ConversationScreenState extends State<ConversationScreen>
   @override
   Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(
-      title: Text(widget.title),
+      backgroundColor: Colors.white,
+      toolbarHeight: 76,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+      ),
+      elevation: 6,
+      shadowColor: AppColors.ink.withValues(alpha: 0.12),
+      titleSpacing: 4,
+      title: Row(
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            padding: const EdgeInsets.all(5),
+            decoration: const BoxDecoration(
+              color: AppColors.peach,
+              shape: BoxShape.circle,
+            ),
+            child: const TigerHead(size: 34),
+          ),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              widget.title,
+              style: AppTextStyles.heading2.copyWith(fontSize: 20),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
       actions: [
-        IconButton(
-          tooltip: 'Làm mới',
-          onPressed: _fetching ? null : _refresh,
-          icon: const Icon(Icons.refresh),
+        Padding(
+          padding: const EdgeInsets.only(right: 12),
+          child: IconButton.filledTonal(
+            style: IconButton.styleFrom(
+              backgroundColor: AppColors.lavender,
+              foregroundColor: AppColors.ink,
+              fixedSize: const Size(44, 44),
+            ),
+            tooltip: 'Làm mới',
+            onPressed: _fetching ? null : _refresh,
+            icon: const Icon(Icons.refresh_rounded),
+          ),
         ),
       ],
     ),
@@ -212,26 +252,40 @@ class _ConversationScreenState extends State<ConversationScreen>
                           constraints: BoxConstraints(
                             maxWidth: MediaQuery.sizeOf(context).width * 0.78,
                           ),
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(14),
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
                           decoration: BoxDecoration(
                             color: mine
-                                ? AppColors.primaryOrange.withValues(
-                                    alpha: 0.14,
-                                  )
-                                : Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(18),
+                                ? AppColors.primaryOrange
+                                : Colors.white,
+                            borderRadius: BorderRadius.only(
+                              topLeft: const Radius.circular(20),
+                              topRight: const Radius.circular(20),
+                              bottomLeft: Radius.circular(mine ? 20 : 6),
+                              bottomRight: Radius.circular(mine ? 6 : 20),
+                            ),
+                            boxShadow: mine ? null : AppShadows.soft,
                           ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(message['content'] as String),
-                              const SizedBox(height: 6),
+                              Text(
+                                message['content'] as String,
+                                style: AppTextStyles.body.copyWith(
+                                  fontSize: 15,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
                               Text(
                                 '${formatDateTime(DateTime.parse(message['created_at'] as String))}${mine && message['read_at'] != null ? ' · Đã đọc' : ''}',
-                                style: const TextStyle(
+                                style: AppTextStyles.caption.copyWith(
                                   fontSize: 11,
-                                  color: AppColors.secondaryText,
+                                  color: mine
+                                      ? AppColors.ink
+                                      : AppColors.secondaryText,
+                                  fontWeight: mine
+                                      ? FontWeight.w600
+                                      : FontWeight.w500,
                                 ),
                               ),
                             ],
@@ -241,8 +295,15 @@ class _ConversationScreenState extends State<ConversationScreen>
                     },
                   ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(28),
+              ),
+              boxShadow: AppShadows.soft,
+            ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -255,22 +316,32 @@ class _ConversationScreenState extends State<ConversationScreen>
                     maxLength: 2000,
                     decoration: const InputDecoration(
                       hintText: 'Nhập tin nhắn…',
-                      border: OutlineInputBorder(),
                     ),
                     textCapitalization: TextCapitalization.sentences,
                   ),
                 ),
                 const SizedBox(width: 8),
                 IconButton.filled(
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppColors.ink,
+                    foregroundColor: Colors.white,
+                    fixedSize: const Size(54, 54),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                  ),
                   tooltip: 'Gửi',
                   onPressed: _sending ? null : _send,
                   icon: _sending
                       ? const SizedBox(
                           width: 20,
                           height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
-                      : const Icon(Icons.send),
+                      : const Icon(Icons.send_rounded),
                 ),
               ],
             ),

@@ -114,9 +114,8 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen> {
   Future<void> _copy(String value, String label) async {
     await Clipboard.setData(ClipboardData(text: value));
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Đã sao chép $label.')),
-    );
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Đã sao chép $label.')));
   }
 
   @override
@@ -127,48 +126,44 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen> {
         child: _loading
             ? const Center(child: CircularProgressIndicator())
             : _error != null && _order == null
-                ? _buildLoadError()
-                : _paid
-                    ? _buildSuccess()
-                    : _buildPayment(),
+            ? _buildLoadError()
+            : _paid
+            ? _buildSuccess()
+            : _buildPayment(),
       ),
     );
   }
 
   Widget _buildLoadError() => Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: AppCard(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.error_outline,
-                  size: 42,
-                  color: AppColors.error,
-                ),
-                const SizedBox(height: 12),
-                const Text(
-                  'Không thể tạo đơn thanh toán',
-                  style: AppTextStyles.heading2,
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _error ?? '',
-                  style: AppTextStyles.caption,
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                OutlinedButton.icon(
-                  onPressed: _createOrder,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Thử lại'),
-                ),
-              ],
+    child: Padding(
+      padding: const EdgeInsets.all(24),
+      child: AppCard(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, size: 42, color: AppColors.error),
+            const SizedBox(height: 12),
+            const Text(
+              'Không thể tạo đơn thanh toán',
+              style: AppTextStyles.heading2,
             ),
-          ),
+            const SizedBox(height: 8),
+            Text(
+              _error ?? '',
+              style: AppTextStyles.caption,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
+            OutlinedButton.icon(
+              onPressed: _createOrder,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Thử lại'),
+            ),
+          ],
         ),
-      );
+      ),
+    ),
+  );
 
   Widget _buildPayment() {
     final order = _order!;
@@ -198,7 +193,7 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen> {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Thanh toán demo thực tế: ${formatPrice(amount)}',
+                  'Số tiền chuyển khoản demo: ${formatPrice(amount)}',
                   style: AppTextStyles.heading2.copyWith(
                     color: AppColors.primaryOrange,
                   ),
@@ -255,10 +250,10 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen> {
                           fit: BoxFit.contain,
                           loadingBuilder: (context, child, progress) =>
                               progress == null
-                                  ? child
-                                  : const Center(
-                                      child: CircularProgressIndicator(),
-                                    ),
+                              ? child
+                              : const Center(
+                                  child: CircularProgressIndicator(),
+                                ),
                           errorBuilder: (_, __, ___) => const Center(
                             child: Text(
                               'Không tải được QR. Bạn vẫn có thể chuyển khoản theo thông tin bên dưới.',
@@ -303,10 +298,7 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen> {
                       'số tài khoản',
                     ),
                   ),
-                  _PaymentRow(
-                    label: 'Số tiền',
-                    value: formatPrice(amount),
-                  ),
+                  _PaymentRow(label: 'Số tiền', value: formatPrice(amount)),
                   _PaymentRow(
                     label: 'Nội dung',
                     value: code,
@@ -336,9 +328,7 @@ class _MembershipPaymentScreenState extends State<MembershipPaymentScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2),
                   )
                 : const Icon(Icons.refresh),
-            label: Text(
-              _checking ? 'Đang kiểm tra...' : 'Kiểm tra thanh toán',
-            ),
+            label: Text(_checking ? 'Đang kiểm tra...' : 'Kiểm tra thanh toán'),
           ),
           const SizedBox(height: 10),
           const Text(
@@ -423,37 +413,28 @@ class _PaymentRow extends StatelessWidget {
   final String value;
   final VoidCallback? onCopy;
 
-  const _PaymentRow({
-    required this.label,
-    required this.value,
-    this.onCopy,
-  });
+  const _PaymentRow({required this.label, required this.value, this.onCopy});
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              width: 105,
-              child: Text(label, style: AppTextStyles.caption),
-            ),
-            Expanded(
-              child: Text(
-                value,
-                style: AppTextStyles.body.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-            if (onCopy != null)
-              IconButton(
-                tooltip: 'Sao chép',
-                onPressed: value.isEmpty ? null : onCopy,
-                icon: const Icon(Icons.copy_rounded, size: 19),
-              ),
-          ],
+    padding: const EdgeInsets.only(bottom: 12),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(width: 105, child: Text(label, style: AppTextStyles.caption)),
+        Expanded(
+          child: Text(
+            value,
+            style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600),
+          ),
         ),
-      );
+        if (onCopy != null)
+          IconButton(
+            tooltip: 'Sao chép',
+            onPressed: value.isEmpty ? null : onCopy,
+            icon: const Icon(Icons.copy_rounded, size: 19),
+          ),
+      ],
+    ),
+  );
 }

@@ -1,3 +1,5 @@
+import 'catalogue_media.dart';
+
 class Trainer {
   final String id, name, specialty, description, imageUrl;
   final int experienceYears;
@@ -11,10 +13,16 @@ class Trainer {
   });
   factory Trainer.fromJson(Map<String, dynamic> json) => Trainer(
     id: json['id'] as String,
-    name: json['name'] as String,
+    name: cleanName(json['name'] as String),
     specialty: json['specialty'] as String? ?? '',
-    description: json['description'] as String? ?? '',
-    imageUrl: json['image_url'] as String? ?? '',
+    description: trainerIntro(
+      json['id'] as String,
+      json['description'] as String? ?? '',
+    ),
+    imageUrl: trainerImage(
+      json['id'] as String,
+      json['image_url'] as String? ?? '',
+    ),
     experienceYears: json['experience_years'] as int? ?? 0,
   );
 }

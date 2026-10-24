@@ -3,12 +3,14 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/formatters.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../models/mascot_mood.dart';
 import '../../models/reward.dart';
 import '../../services/reward_service.dart';
 import '../../widgets/app_button.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/catalogue_widgets.dart';
 import '../../widgets/data_view.dart';
+import '../../widgets/mascot.dart';
 import '../../widgets/workflow_button.dart';
 
 class RewardDetailScreen extends StatelessWidget {
@@ -68,6 +70,11 @@ class RewardDetailScreen extends StatelessWidget {
             confirmation:
                 'Dùng ${formatNumber(reward.points)} GP để đổi ${reward.name}?',
             success: 'Đã đổi quà. Xem mã nhận trong Hoạt động của tôi.',
+            onSuccess: () => showMascotToast(
+              context,
+              mood: MascotMood.happy,
+              message: 'Đổi quà thành công! Chúc bạn tập vui.',
+            ),
           )
         else
           const AppButton(text: 'Tạm hết quà'),

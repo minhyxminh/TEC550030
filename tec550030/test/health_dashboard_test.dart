@@ -144,6 +144,8 @@ void main() {
         250,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.ensureVisible(find.text('Tính BMI'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Tính BMI'));
       await tester.pumpAndSettle();
       final kg = find.byKey(const ValueKey('ruler-kg'));
@@ -362,6 +364,8 @@ void main() {
         250,
         scrollable: find.byType(Scrollable).first,
       );
+      await tester.ensureVisible(find.text('Tính BMI'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Tính BMI'));
       await tester.pumpAndSettle();
       final save = find.byKey(const ValueKey('save-health'));

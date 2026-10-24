@@ -13,6 +13,7 @@ import 'package:tec550030/core/theme/app_theme.dart';
 import 'package:tec550030/main.dart';
 import 'package:tec550030/screens/gympoint/gympoint_screen.dart';
 import 'package:tec550030/screens/home/home_screen.dart';
+import 'package:tec550030/screens/main_layout/main_layout.dart';
 import 'package:tec550030/screens/profile/profile_screen.dart';
 import 'package:tec550030/screens/rewards/rewards_screen.dart';
 import 'package:tec550030/screens/services/services_screen.dart';
@@ -46,6 +47,14 @@ Future<void> capture(WidgetTester tester, String name) async {
     find.byKey(_previewKey),
   );
   await tester.runAsync(() async {
+    // Asset images decode outside the fake clock.
+    for (final element in find.byType(Image).evaluate()) {
+      final image = element.widget as Image;
+      await precacheImage(image.image, element, onError: (_, _) {});
+    }
+  });
+  await tester.pumpAndSettle();
+  await tester.runAsync(() async {
     final image = await boundary.toImage(pixelRatio: 1.5);
     final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
     await Directory('.dart_tool/ui_previews').create(recursive: true);
@@ -74,6 +83,27 @@ void main() {
       await (FontLoader(
         'MaterialIcons',
       )..addFont(Future.value(ByteData.sublistView(icons)))).load();
+
+    // Brand fonts for previews (tests otherwise render the Ahem font).
+    for (final (family, files) in [
+      ('Baloo2', ['Baloo2-600', 'Baloo2-700', 'Baloo2-800']),
+      (
+        'BeVietnamPro',
+        [
+          'BeVietnamPro-Regular',
+          'BeVietnamPro-Medium',
+          'BeVietnamPro-SemiBold',
+          'BeVietnamPro-Bold',
+        ],
+      ),
+    ]) {
+      final loader = FontLoader(family);
+      for (final file in files) {
+        final bytes = await File('assets/fonts/$file.ttf').readAsBytes();
+        loader.addFont(Future.value(ByteData.sublistView(bytes)));
+      }
+      await loader.load();
+    }
     }
   });
   setUp(() async {
@@ -126,7 +156,7 @@ void main() {
     await tester.tap(find.widgetWithText(AppButton, 'Đăng nhập'));
     await tester.pumpAndSettle();
     expect(find.text('Email/mật khẩu không hợp lệ.'), findsOneWidget);
-    expect(find.byType(BottomNavigationBar), findsNothing);
+    expect(find.byType(GymFlowNavBar), findsNothing);
     fail = false;
     await tester.ensureVisible(find.widgetWithText(AppButton, 'Đăng nhập'));
     await tester.tap(find.widgetWithText(AppButton, 'Đăng nhập'));
@@ -241,7 +271,7 @@ void main() {
       await tester.tap(find.widgetWithText(AppButton, 'Đăng ký'));
       await tester.pumpAndSettle();
       expect(find.text('Xác nhận email'), findsOneWidget);
-      expect(find.byType(BottomNavigationBar), findsNothing);
+      expect(find.byType(GymFlowNavBar), findsNothing);
       await tester.tap(find.text('Về đăng nhập'));
       await tester.pumpAndSettle();
       expect(find.text('Đăng nhập để tiếp tục'), findsOneWidget);
@@ -272,7 +302,13 @@ void main() {
       expect(find.text('Nước khoáng'), findsOneWidget);
       expect(find.text('Thanh protein'), findsOneWidget);
       expect(find.text('Hết quà'), findsOneWidget);
-      expect(find.byType(Image), findsNothing);
+      // Catalogue photos ship with the app; nothing loads from the network.
+      expect(
+        tester
+            .widgetList<Image>(find.byType(Image))
+            .where((image) => image.image is NetworkImage),
+        isEmpty,
+      );
       expect(tester.takeException(), isNull);
       await capture(tester, 'rewards');
       await tester.tap(find.text('Nước khoáng'));
