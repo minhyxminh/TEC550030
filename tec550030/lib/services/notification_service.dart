@@ -6,8 +6,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/api/api_client.dart';
 import '../models/app_notification.dart';
+import '../models/buddy_match.dart';
 import '../models/user.dart';
 import 'auth_service.dart';
+import 'boss_service.dart';
 import 'buddy_service.dart';
 import 'chat_service.dart';
 import 'workflow_service.dart';
@@ -24,7 +26,7 @@ class NotificationService with WidgetsBindingObserver {
 
   /// Background polling; widget tests switch it off.
   static bool polling = true;
-  static const _interval = Duration(seconds: 30);
+  static const _interval = Duration(seconds: 15);
   static const _maxItems = 60;
 
   final items = ValueNotifier<List<AppNotification>>(const []);
@@ -45,6 +47,9 @@ class NotificationService with WidgetsBindingObserver {
   /// Conversation currently on screen; its messages are not announced.
   String? activeConversationId;
 
+  /// Chats opened in this session, in case a poll overwrote [watch]'s save.
+  final _watched = <String, String>{};
+
   String get _itemsKey => 'notifications_${_user?.id}';
   String get _stateKey => 'notification_state_${_user?.id}';
 
@@ -54,15 +59,26 @@ class NotificationService with WidgetsBindingObserver {
     if (_listeners > 1) return;
     WidgetsBinding.instance.addObserver(this);
     items.value = const [];
+    _user = null;
+    _watched.clear();
+    await _loadUser();
+    if (!polling || _listeners == 0) return;
+    unawaited(refresh());
+    // Keeps ticking even if the first sign-in check failed (no network yet
+    // right after start-up): every tick retries loading the account.
+    _timer = Timer.periodic(_interval, (_) => refresh());
+  }
+
+  Future<bool> _loadUser() async {
+    if (_user != null) return true;
     try {
       _user = await AuthService().getCurrentUser();
-    } catch (_) {
-      return;
+    } catch (error) {
+      debugPrint('NotificationService: account not loaded yet ($error)');
+      return false;
     }
     await _restore();
-    if (!polling) return;
-    unawaited(refresh());
-    _timer = Timer.periodic(_interval, (_) => refresh());
+    return true;
   }
 
   void detach() {
@@ -154,11 +170,12 @@ class NotificationService with WidgetsBindingObserver {
 
   /// Checks every source once. Safe to call at any time.
   Future<void> refresh() async {
-    final user = _user;
-    if (user == null || _busy) return;
+    if (_busy || _listeners == 0) return;
     _busy = true;
     try {
       if (await ApiClient.getToken() == null) return;
+      if (!await _loadUser()) return;
+      final user = _user!;
       final prefs = await SharedPreferences.getInstance();
       final first = !prefs.containsKey(_stateKey);
       final state = first
@@ -167,17 +184,27 @@ class NotificationService with WidgetsBindingObserver {
               jsonDecode(prefs.getString(_stateKey)!) as Map,
             );
       final found = <AppNotification>[];
-      final checks = user.role == 'ADMIN'
-          ? [_adminInbox(state, found, first), _adminQueue(state, found, first)]
-          : [
-              _memberMessages(user, state, found),
-              _activity(state, found, first),
-            ];
+      // Started one at a time, each inside its own try: a source that fails
+      // early can never surface as an unhandled error.
+      final checks = <Future<void> Function()>[
+        if (user.role == 'ADMIN') ...[
+          () => _adminInbox(state, found, first),
+          () => _adminQueue(state, found, first),
+          // Admins can have Gym Buddy chats and share the boss battle too.
+          () => _memberMessages(user, state, found, admin: true),
+          () => _boss(state, found),
+        ] else ...[
+          () => _memberMessages(user, state, found),
+          () => _activity(state, found, first),
+          () => _boss(state, found),
+        ],
+      ];
       for (final check in checks) {
         try {
-          await check;
-        } catch (_) {
+          await check();
+        } catch (error) {
           // One unavailable source must not block the others.
+          debugPrint('NotificationService: check failed ($error)');
         }
       }
       await prefs.setString(_stateKey, jsonEncode(state));
@@ -198,13 +225,44 @@ class NotificationService with WidgetsBindingObserver {
   Future<void> _memberMessages(
     User user,
     Map<String, dynamic> state,
-    List<AppNotification> found,
-  ) async {
+    List<AppNotification> found, {
+    bool admin = false,
+  }) async {
     final chats = <String, String>{};
-    final support = await ChatService().open();
-    chats[support['id'] as String] = 'GymFlow';
+    // Each source on its own: a failing buddy lookup must not hide the
+    // support chat, and the reverse. Admins answer support chats from the
+    // inbox check instead, so those are left out here.
+    if (!admin) {
+      try {
+        final support = await ChatService().open();
+        chats[support['id'] as String] = 'GymFlow';
+      } catch (error) {
+        debugPrint('NotificationService: support chat unavailable ($error)');
+      }
+    }
+    final inbox = admin
+        ? (state['unread'] as Map?)?.keys.cast<String>().toSet() ?? <String>{}
+        : const <String>{};
     final seenMatches = (state['matches'] as List?)?.cast<String>().toSet();
-    final matches = await const BuddyService().getMatches();
+    var matches = const <BuddyMatch>[];
+    try {
+      matches = await const BuddyService().getMatches();
+      state['matches'] = [for (final m in matches) m.id];
+    } catch (error) {
+      debugPrint('NotificationService: buddy matches unavailable ($error)');
+    }
+    // Chats seen before (e.g. a buddy group opened from the app) stay
+    // watched even though the API cannot list them for members.
+    final lastSeen = Map<String, dynamic>.from(state['seq'] as Map? ?? {});
+    final names = Map<String, dynamic>.from(state['names'] as Map? ?? {});
+    for (final MapEntry(:key, :value) in _watched.entries) {
+      names.putIfAbsent(key, () => value);
+    }
+    final listed = {...chats.keys, for (final m in matches) ?m.conversationId};
+    for (final id in {...lastSeen.keys, ...names.keys}) {
+      if (inbox.contains(id)) continue; // a member's support chat
+      chats.putIfAbsent(id, () => names[id] as String? ?? 'cuộc trò chuyện');
+    }
     for (final m in matches) {
       if (m.conversationId != null) chats[m.conversationId!] = m.otherUserName;
       if (seenMatches != null && !seenMatches.contains(m.id)) {
@@ -220,14 +278,22 @@ class NotificationService with WidgetsBindingObserver {
         );
       }
     }
-    state['matches'] = [for (final m in matches) m.id];
 
-    final lastSeen = Map<String, dynamic>.from(state['seq'] as Map? ?? {});
     for (final MapEntry(key: id, value: name) in chats.entries) {
-      final messages = await ChatService().messages(id);
+      names[id] = name;
+      final List<Map<String, dynamic>> messages;
+      try {
+        messages = await ChatService().messages(id);
+      } catch (error) {
+        debugPrint('NotificationService: chat $id unavailable ($error)');
+        continue;
+      }
       if (messages.isEmpty) continue;
       final before = (lastSeen[id] as num?)?.toInt();
+      // A newly watched group starts from its latest message.
+      final baseline = before == null && !listed.contains(id);
       for (final m in messages) {
+        if (baseline) break;
         final seq = (m['sequence'] as num).toInt();
         final mine = m['sender_id'] == user.id;
         // First time: only unread messages; afterwards anything newer.
@@ -252,6 +318,27 @@ class NotificationService with WidgetsBindingObserver {
           .reduce((a, b) => a > b ? a : b);
     }
     state['seq'] = lastSeen;
+    state['names'] = names;
+  }
+
+  /// Watches a chat the API cannot list for members (a buddy group).
+  Future<void> watch(String conversationId, String name) async {
+    if (_user == null) return;
+    _watched.putIfAbsent(conversationId, () => name);
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_stateKey);
+    final state = raw == null
+        ? <String, dynamic>{}
+        : Map<String, dynamic>.from(jsonDecode(raw) as Map);
+    final seq = Map<String, dynamic>.from(state['seq'] as Map? ?? {});
+    final names = Map<String, dynamic>.from(state['names'] as Map? ?? {});
+    if (seq.containsKey(conversationId) || names.containsKey(conversationId)) {
+      return;
+    }
+    // The next poll takes its latest message as the starting point.
+    names[conversationId] = name;
+    state['names'] = names;
+    await prefs.setString(_stateKey, jsonEncode(state));
   }
 
   // Membership orders, rewards and PT bookings changing status.
@@ -352,6 +439,46 @@ class NotificationService with WidgetsBindingObserver {
     }
     state['status'] = current;
     state['reminded'] = reminded.toList();
+  }
+
+  // Đại chiến Boss: once a month when Hổ Flow is strong enough, and when
+  // the boss falls.
+  Future<void> _boss(
+    Map<String, dynamic> state,
+    List<AppNotification> found,
+  ) async {
+    final b = await const BossService().status();
+    final month = '${b.month.year}-${b.month.month}';
+    final seen = Map<String, dynamic>.from(state['boss'] as Map? ?? {});
+    if (b.strongEnough && !b.defeated && seen['ready'] != month) {
+      seen['ready'] = month;
+      found.add(
+        AppNotification(
+          id: 'boss-ready-$month',
+          kind: NotificationKind.boss,
+          title: 'Hổ Flow đã đủ sức đánh Boss!',
+          body:
+              'Máu Hổ ${b.tigerHp} đã vượt Boss ${b.bossHp}. Vào đấu trường bấm Giao chiến ngay.',
+          createdAt: DateTime.now(),
+        ),
+      );
+    }
+    if (b.defeated && seen['won'] != month) {
+      seen['won'] = month;
+      final next = b.month.month % 12 + 1;
+      found.add(
+        AppNotification(
+          id: 'boss-won-$month',
+          kind: NotificationKind.boss,
+          title: 'Hạ Boss rồi! +${b.rewardPoints} GP vào ví',
+          body: b.myHp > 0
+              ? 'Cảm ơn bạn đã góp ${b.myHp} HP. Boss tháng $next sắp xuất hiện...'
+              : 'Cả cộng đồng đã thắng. Boss tháng $next sắp xuất hiện...',
+          createdAt: DateTime.now(),
+        ),
+      );
+    }
+    state['boss'] = seen;
   }
 
   // Admin: unread support messages.

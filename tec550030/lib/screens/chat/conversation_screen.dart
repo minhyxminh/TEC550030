@@ -39,6 +39,7 @@ class _ConversationScreenState extends State<ConversationScreen>
     // This chat is on screen: mute its banners and clear its badges.
     NotificationService.instance.activeConversationId = widget.conversationId;
     NotificationService.instance.markConversationRead(widget.conversationId);
+    NotificationService.instance.watch(widget.conversationId, widget.title);
     _refresh();
     _timer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (mounted &&

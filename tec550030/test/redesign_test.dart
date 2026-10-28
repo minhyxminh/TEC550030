@@ -25,7 +25,11 @@ import 'api_fixtures.dart';
 
 const _previewKey = ValueKey('preview');
 
-Future<void> _show(WidgetTester tester, Widget page, {double height = 844}) async {
+Future<void> _show(
+  WidgetTester tester,
+  Widget page, {
+  double height = 844,
+}) async {
   tester.view.physicalSize = Size(390, height);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
@@ -60,9 +64,8 @@ Future<void> _capture(WidgetTester tester, String name) async {
     final image = await boundary.toImage(pixelRatio: 1.5);
     final bytes = await image.toByteData(format: ui.ImageByteFormat.png);
     await Directory('.dart_tool/ui_previews').create(recursive: true);
-    await File(
-      '.dart_tool/ui_previews/$name.png',
-    ).writeAsBytes(bytes!.buffer.asUint8List());
+    await File('.dart_tool/ui_previews/$name.png')
+        .writeAsBytes(bytes!.buffer.asUint8List());
     image.dispose();
   });
 }
@@ -86,7 +89,8 @@ void main() {
         'Roboto',
       )..addFont(Future.value(ByteData.sublistView(bytes)))).load();
     }
-    final icons = await File('$fontDir/materialicons-regular.otf').readAsBytes();
+    final icons = await File('$fontDir/materialicons-regular.otf')
+        .readAsBytes();
     await (FontLoader(
       'MaterialIcons',
     )..addFont(Future.value(ByteData.sublistView(icons)))).load();
@@ -172,12 +176,19 @@ void main() {
     );
     expect(find.text('Video ngắn giúp bạn tập đúng kỹ thuật'), findsOneWidget);
     await tester.scrollUntilVisible(
+      find.byKey(const ValueKey('machine-guides')),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.scrollUntilVisible(
       find.text('Squat tạ đơn'),
       400,
-      scrollable: find.descendant(
-        of: find.byKey(const ValueKey('machine-guides')),
-        matching: find.byType(Scrollable),
-      ).first,
+      scrollable: find
+          .descendant(
+            of: find.byKey(const ValueKey('machine-guides')),
+            matching: find.byType(Scrollable),
+          )
+          .first,
     );
     expect(find.text('Squat tạ đơn'), findsOneWidget);
     expect(machineGuides, hasLength(5));
@@ -213,9 +224,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(
-      const MaterialApp(home: MachineGuideListScreen()),
-    );
+    await tester.pumpWidget(const MaterialApp(home: MachineGuideListScreen()));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Squat tạ đơn'), 200);
     expect(find.text('Squat tạ đơn'), findsOneWidget);
@@ -247,10 +256,7 @@ void main() {
         '{"weight_kg":$kg,"height_cm":170,"age":25,"measured_at":"2026-10-20T00:00:00Z"}',
       );
       await _show(tester, HealthScreen(key: ValueKey(kg)), height: 1600);
-      expect(
-        mascot().mood,
-        kg < 60 ? MascotMood.happy : MascotMood.tired,
-      );
+      expect(mascot().mood, kg < 60 ? MascotMood.happy : MascotMood.tired);
       await _capture(tester, 'redesign-health-${kg.round()}');
     }
     expect(tester.takeException(), isNull);

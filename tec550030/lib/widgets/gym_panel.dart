@@ -18,6 +18,7 @@ import '../screens/home/qr_scanner_screen.dart';
 import 'app_button.dart';
 import 'app_card.dart';
 import 'catalogue_widgets.dart';
+import 'checkin_boss_sheet.dart';
 import 'decor.dart';
 import 'hourly_occupancy_chart.dart';
 import 'mascot.dart';
@@ -152,6 +153,7 @@ class _GymPanelState extends State<GymPanel> {
     try {
       String message;
       var mood = MascotMood.celebrate;
+      var fresh = false;
       if (sessionId != null) {
         mood = MascotMood.tired;
         await ApiClient.postJson('/gym/check-out', {'session_id': sessionId});
@@ -162,13 +164,26 @@ class _GymPanelState extends State<GymPanel> {
           'token': token!,
         });
         _session = data['session'] as Map<String, dynamic>;
+        // Only the day's first check-in powers Hổ Flow (+1 HP), the same
+        // once-a-day rule as GymPoint.
+        fresh =
+            data['already_checked_in'] != true &&
+            ((data['points_earned'] as num?) ?? 0) > 0;
         message = data['already_checked_in'] == true
             ? 'Bạn đã check-in.'
             : 'Check-in thành công · +${data['points_earned']} GP';
       }
       await _load();
       if (!mounted) return;
-      showMascotToast(context, mood: mood, message: message);
+      final toast = showMascotToast(context, mood: mood, message: message);
+      if (fresh) {
+        // After the mascot card: how this check-in powered up Hổ Flow.
+        final branch = _branchName;
+        final at = DateTime.now();
+        toast.then((_) {
+          if (mounted) showCheckinBossSheet(context, branch: branch, time: at);
+        });
+      }
       NotificationService.instance.record(
         kind: NotificationKind.checkin,
         title: sessionId == null ? 'Check-in thành công' : 'Đã check-out',

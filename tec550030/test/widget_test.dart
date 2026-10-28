@@ -64,6 +64,13 @@ Future<void> capture(WidgetTester tester, String name) async {
   });
 }
 
+// The gym panel sits below the boss card; bring it on screen first.
+Future<void> scrollToGymPanel(WidgetTester tester) => tester.scrollUntilVisible(
+  find.text('Phòng tập hôm nay'),
+  200,
+  scrollable: find.byType(Scrollable).first,
+);
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   setUpAll(() async {
@@ -84,26 +91,26 @@ void main() {
         'MaterialIcons',
       )..addFont(Future.value(ByteData.sublistView(icons)))).load();
 
-    // Brand fonts for previews (tests otherwise render the Ahem font).
-    for (final (family, files) in [
-      ('Baloo2', ['Baloo2-600', 'Baloo2-700', 'Baloo2-800']),
-      (
-        'BeVietnamPro',
-        [
-          'BeVietnamPro-Regular',
-          'BeVietnamPro-Medium',
-          'BeVietnamPro-SemiBold',
-          'BeVietnamPro-Bold',
-        ],
-      ),
-    ]) {
-      final loader = FontLoader(family);
-      for (final file in files) {
-        final bytes = await File('assets/fonts/$file.ttf').readAsBytes();
-        loader.addFont(Future.value(ByteData.sublistView(bytes)));
+      // Brand fonts for previews (tests otherwise render the Ahem font).
+      for (final (family, files) in [
+        ('Baloo2', ['Baloo2-600', 'Baloo2-700', 'Baloo2-800']),
+        (
+          'BeVietnamPro',
+          [
+            'BeVietnamPro-Regular',
+            'BeVietnamPro-Medium',
+            'BeVietnamPro-SemiBold',
+            'BeVietnamPro-Bold',
+          ],
+        ),
+      ]) {
+        final loader = FontLoader(family);
+        for (final file in files) {
+          final bytes = await File('assets/fonts/$file.ttf').readAsBytes();
+          loader.addFont(Future.value(ByteData.sublistView(bytes)));
+        }
+        await loader.load();
       }
-      await loader.load();
-    }
     }
   });
   setUp(() async {
@@ -131,10 +138,11 @@ void main() {
       expect(find.text('Lê Minh Anh'), findsOneWidget);
       expect(find.text('80'), findsOneWidget);
       expect(find.text('Basic'), findsOneWidget);
+      await capture(tester, 'home');
+      await scrollToGymPanel(tester);
       expect(find.text('Quét QR check-in'), findsOneWidget);
       expect(find.text('47'), findsNothing);
       expect(tester.takeException(), isNull);
-      await capture(tester, 'home');
     },
   );
 
@@ -184,6 +192,7 @@ void main() {
       tester,
       HomeScreen(onSelectTab: (index) => selectedTab = index),
     );
+    await scrollToGymPanel(tester);
     expect(find.text('Tham gia'), findsOneWidget);
     final joinButton = find.widgetWithText(AppButton, 'Tham gia');
     tester.widget<AppButton>(joinButton).onPressed!.call();
@@ -200,6 +209,7 @@ void main() {
       return fixtureResponse(request);
     });
     await showPage(tester, const HomeScreen());
+    await scrollToGymPanel(tester);
     expect(find.text('Tham gia'), findsOneWidget);
     expect(find.text('Quét QR check-in'), findsNothing);
     expect(find.text('Chọn cơ sở để xem occupancy.'), findsOneWidget);
@@ -227,6 +237,7 @@ void main() {
         ),
       ),
     );
+    await scrollToGymPanel(tester);
     expect(find.text('Tham gia'), findsOneWidget);
     tester
         .widget<AppButton>(find.widgetWithText(AppButton, 'Tham gia'))
@@ -237,6 +248,7 @@ void main() {
     await tester.tap(find.text('GymFlow Hậu Giang'));
     await tester.pumpAndSettle();
     expect(selectedGym, 'q5');
+    await scrollToGymPanel(tester);
     expect(find.text('Quét QR check-in'), findsOneWidget);
   });
 

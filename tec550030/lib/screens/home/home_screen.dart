@@ -15,6 +15,7 @@ import '../../services/buddy_service.dart';
 import '../../services/gympoint_service.dart';
 import '../../services/health_service.dart';
 import '../../services/location_service.dart';
+import '../../widgets/boss_banner.dart';
 import '../../widgets/ambient.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/brand.dart';
@@ -257,6 +258,8 @@ class _HomeScreenState extends State<HomeScreen> {
               onPoints: () => onSelectTab?.call(2),
               onMembership: () => onSelectTab?.call(3),
             ),
+            const SizedBox(height: AppSpacing.lg),
+            const BossBanner(),
             const SizedBox(height: AppSpacing.lg),
             Row(
               children: [

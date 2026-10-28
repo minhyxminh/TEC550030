@@ -73,6 +73,15 @@ flutter:
     - assets/brand/
     - assets/mascot/
     - assets/catalogue/
+    - assets/mascot/grow/
+    - assets/battle/fight/1-ho-dam-boc/
+    - assets/battle/fight/2-boss-thuc-day/
+    - assets/battle/fight/3-ho-can-mat/
+    - assets/battle/fight/4-boss-can-mat/
+    - assets/battle/fight/5-lao-vao-nhau/
+    - assets/battle/fight/6-dam-may-danh-nhau/
+    - assets/battle/lose/
+    - assets/battle/win/
 
   fonts:
     - family: Baloo2

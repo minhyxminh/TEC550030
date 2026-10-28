@@ -9,6 +9,7 @@ import '../../services/notification_service.dart';
 import '../../widgets/decor.dart';
 import '../../widgets/empty_state.dart';
 import '../../widgets/notification_bell.dart';
+import '../boss/boss_battle_screen.dart';
 import '../chat/conversation_screen.dart';
 import '../profile/activity_screen.dart';
 import '../profile/admin_screen.dart';
@@ -35,6 +36,8 @@ Future<void> openNotification(BuildContext context, AppNotification n) async {
       );
     case NotificationKind.admin:
       target = const AdminScreen();
+    case NotificationKind.boss:
+      target = const BossBattleScreen();
     case NotificationKind.membership ||
         NotificationKind.reward ||
         NotificationKind.booking ||

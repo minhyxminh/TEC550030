@@ -53,6 +53,8 @@ const businessErrors = {
   BOOKING_STARTED: [409, 'Buổi tập đã bắt đầu, không thể hủy.'], ORDER_PROCESSED: [409, 'Đơn này đã được xử lý.'],
   CANNOT_SWIPE_SELF: [400, 'Không thể tự kết nối với chính mình.'],
   NOT_MATCHED: [409, 'Chỉ có thể thêm Gym Buddy đã match với bạn.'],
+  BOSS_ALREADY_DEFEATED: [409, 'Boss tháng này đã bị hạ rồi.'],
+  BOSS_FIGHT_CLOSED: [409, 'Hổ Flow chưa đủ máu. Trận chiến mở khi đủ HP hoặc vào tuần cuối tháng.'],
   PAYMENT_REQUIRED: [409, 'Đơn thanh toán phải được xác nhận đã nhận tiền trước khi kích hoạt.'],
   PAYMENT_NOT_CONFIGURED: [409, 'Gói tập này chưa được cấu hình số tiền thanh toán.'],
 };
@@ -260,6 +262,14 @@ export function createApp({
     if (!user) throw new ApiError(404, 'PROFILE_NOT_FOUND', 'Chưa có hồ sơ. Kiểm tra migration và trigger tạo user.');
     const avatar = user.avatar_path ? req.supabase.storage.from('gymflow-images').getPublicUrl(user.avatar_path).data.publicUrl : null;
     res.json({ ...user, email: req.authUser.email, avatar_url: avatar });
+  });
+
+  app.get('/boss', requireAuth, async (req, res) => {
+    res.json(await workflow(req.supabase, 'gymflow_boss', 'status'));
+  });
+  app.post('/boss/fight', requireAuth, async (req, res) => {
+    z.object({}).strict().parse(req.body ?? {});
+    res.json(await workflow(req.supabase, 'gymflow_boss', 'fight'));
   });
 
   app.get('/points/balance', requireAuth, async (req, res) => {
@@ -653,7 +663,9 @@ if (typeof Deno !== 'undefined') {
   const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) throw new Error('Missing Supabase URL or publishable/anon key.');
   const gateway = createEdgeApp({
+    // User routes stay on the unprivileged key + JWT/RLS.
     createSupabase: makeClientFactory({ SUPABASE_URL: url, SUPABASE_PUBLISHABLE_KEY: key }),
+    // Trusted webhook settlement is isolated to the payment endpoint.
     createServiceSupabase: serviceKey
       ? makeClientFactory({ SUPABASE_URL: url, SUPABASE_PUBLISHABLE_KEY: serviceKey })
       : null,

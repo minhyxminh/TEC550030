@@ -6,11 +6,14 @@ import 'core/api/api_client.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  // Mascot and boss-battle clips are frame sequences: keep a whole clip
+  // decoded so playback never waits on a frame.
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 256 << 20;
   runApp(const MyApp());
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key}); 
+  const MyApp({super.key});
   @override
   State<MyApp> createState() => _MyAppState();
 }

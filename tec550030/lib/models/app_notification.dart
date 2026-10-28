@@ -6,6 +6,7 @@ enum NotificationKind {
   booking,
   admin,
   checkin,
+  boss,
 }
 
 /// One entry in the in-app notification centre.

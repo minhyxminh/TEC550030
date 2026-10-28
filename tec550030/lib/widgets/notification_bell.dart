@@ -40,6 +40,11 @@ import 'app_card.dart';
         AppColors.primaryOrange,
         AppColors.peach,
       ),
+      NotificationKind.boss => (
+        Icons.sports_mma_rounded,
+        AppColors.strongOrange,
+        AppColors.butter,
+      ),
       NotificationKind.admin => (
         Icons.admin_panel_settings_rounded,
         AppColors.ink,

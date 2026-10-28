@@ -206,6 +206,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(sentToken, 'raw-QR');
       expect(find.text('1 người đang tập'), findsOneWidget);
+      // After the mascot card, the boss sheet suggests the arena.
+      expect(find.text('Check-in thành công!'), findsOneWidget);
+      expect(find.text('Xem đấu trường'), findsOneWidget);
+      await tester.tap(find.text('Để sau'));
+      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(AppButton, 'Check-out'));
       await tester.pumpAndSettle();
       expect(find.text('0 người đang tập'), findsOneWidget);

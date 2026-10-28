@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/scheduler.dart';
@@ -771,22 +772,28 @@ class MascotMessage extends StatelessWidget {
 
 /// Floating mascot card shown for a few seconds after a milestone
 /// (check-in, redemption, workout done).
-void showMascotToast(
+/// Completes when the card has gone, so a follow-up can wait for it.
+Future<void> showMascotToast(
   BuildContext context, {
   required MascotMood mood,
   required String message,
 }) {
   final overlay = Overlay.maybeOf(context, rootOverlay: true);
-  if (overlay == null) return;
+  if (overlay == null) return Future.value();
+  final done = Completer<void>();
   late final OverlayEntry entry;
   entry = OverlayEntry(
     builder: (_) => _MascotToast(
       mood: mood,
       message: message,
-      onDone: () => entry.remove(),
+      onDone: () {
+        entry.remove();
+        if (!done.isCompleted) done.complete();
+      },
     ),
   );
   overlay.insert(entry);
+  return done.future;
 }
 
 class _MascotToast extends StatefulWidget {
