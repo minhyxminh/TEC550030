@@ -15,6 +15,7 @@ import '../../services/buddy_service.dart';
 import '../../services/gympoint_service.dart';
 import '../../services/health_service.dart';
 import '../../services/location_service.dart';
+import '../../widgets/boss_banner.dart';
 import '../../widgets/ambient.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/brand.dart';
@@ -24,10 +25,12 @@ import '../../widgets/decor.dart';
 import '../../widgets/gym_panel.dart';
 import '../../widgets/machine_guide_card.dart';
 import '../../widgets/mascot.dart';
+import '../../widgets/notification_bell.dart';
 import '../../widgets/user_avatar.dart';
 import '../buddy/buddy_onboarding_screen.dart';
 import '../buddy/buddy_swipe_screen.dart';
 import '../guides/machine_guide_screen.dart';
+import '../notifications/notifications_screen.dart';
 import 'branch_selection_screen.dart';
 
 class _HomeData {
@@ -200,6 +203,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
                 const SizedBox(width: 12),
+                Padding(
+                  padding: const EdgeInsets.only(top: 4, right: 10),
+                  child: NotificationBell(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const NotificationsScreen(),
+                      ),
+                    ),
+                  ),
+                ),
                 Tooltip(
                   message: 'Tài khoản',
                   child: Container(
@@ -244,6 +258,8 @@ class _HomeScreenState extends State<HomeScreen> {
               onPoints: () => onSelectTab?.call(2),
               onMembership: () => onSelectTab?.call(3),
             ),
+            const SizedBox(height: AppSpacing.lg),
+            const BossBanner(),
             const SizedBox(height: AppSpacing.lg),
             Row(
               children: [
