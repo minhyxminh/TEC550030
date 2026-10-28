@@ -7,6 +7,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../services/chat_service.dart';
+import '../../services/notification_service.dart';
 import '../../services/workflow_service.dart';
 import '../../widgets/brand.dart';
 import '../../widgets/loading_view.dart';
@@ -35,6 +36,9 @@ class _ConversationScreenState extends State<ConversationScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // This chat is on screen: mute its banners and clear its badges.
+    NotificationService.instance.activeConversationId = widget.conversationId;
+    NotificationService.instance.markConversationRead(widget.conversationId);
     _refresh();
     _timer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (mounted &&
@@ -48,6 +52,10 @@ class _ConversationScreenState extends State<ConversationScreen>
   @override
   void dispose() {
     _timer?.cancel();
+    final notifications = NotificationService.instance;
+    if (notifications.activeConversationId == widget.conversationId) {
+      notifications.activeConversationId = null;
+    }
     _text.dispose();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();

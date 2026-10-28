@@ -12,6 +12,8 @@ import '../models/user.dart';
 import '../services/branch_service.dart';
 import '../models/gym_branch.dart';
 import '../models/mascot_mood.dart';
+import '../models/app_notification.dart';
+import '../services/notification_service.dart';
 import '../screens/home/qr_scanner_screen.dart';
 import 'app_button.dart';
 import 'app_card.dart';
@@ -167,6 +169,15 @@ class _GymPanelState extends State<GymPanel> {
       await _load();
       if (!mounted) return;
       showMascotToast(context, mood: mood, message: message);
+      NotificationService.instance.record(
+        kind: NotificationKind.checkin,
+        title: sessionId == null ? 'Check-in thành công' : 'Đã check-out',
+        // The title already says what happened; add where and the reward.
+        body: [
+          if (message.contains('+')) 'Nhận ${message.split('· ').last}',
+          ?_branchName,
+        ].join(' · '),
+      );
       widget.onChanged?.call();
     } catch (error) {
       if (mounted) setState(() => _error = error.toString());

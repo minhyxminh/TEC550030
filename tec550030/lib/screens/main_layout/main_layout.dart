@@ -2,6 +2,10 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../models/app_notification.dart';
+import '../../services/notification_service.dart';
+import '../../widgets/notification_bell.dart';
+import '../notifications/notifications_screen.dart';
 import '../home/home_screen.dart';
 import '../health/health_screen.dart';
 import '../chat/chat_entry_screen.dart';
@@ -36,8 +40,48 @@ class MainLayout extends StatefulWidget {
 
 class _MainLayoutState extends State<MainLayout> {
   int _currentIndex = 0;
+  final _notifications = NotificationService.instance;
 
   void _selectTab(int index) => setState(() => _currentIndex = index);
+
+  @override
+  void initState() {
+    super.initState();
+    _notifications.attach();
+    _notifications.incoming.addListener(_announce);
+  }
+
+  @override
+  void dispose() {
+    _notifications.incoming.removeListener(_announce);
+    _notifications.detach();
+    super.dispose();
+  }
+
+  // Slides the newest arrival in at the top while the app is open.
+  void _announce() {
+    final fresh = _notifications.incoming.value;
+    if (fresh.isEmpty || !mounted) return;
+    final latest = fresh.first;
+    showNotificationBanner(
+      context,
+      fresh.length == 1
+          ? latest
+          : AppNotification(
+              id: latest.id,
+              kind: latest.kind,
+              title: '${fresh.length} thông báo mới',
+              body: latest.title,
+              createdAt: latest.createdAt,
+            ),
+      onTap: () => fresh.length == 1
+          ? openNotification(context, latest)
+          : Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+            ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,13 +94,19 @@ class _MainLayoutState extends State<MainLayout> {
         const ServicesScreen(),
         ProfileScreen(onSelectTab: _selectTab),
       ][_currentIndex],
-      floatingActionButton: FloatingActionButton(
-        tooltip: 'Chat hỗ trợ',
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ChatEntryScreen()),
+      floatingActionButton: ValueListenableBuilder<List<AppNotification>>(
+        valueListenable: _notifications.items,
+        builder: (context, _, _) => CountBadge(
+          count: _notifications.unreadMessages,
+          child: FloatingActionButton(
+            tooltip: 'Chat hỗ trợ',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const ChatEntryScreen()),
+            ),
+            child: const Icon(Icons.chat_rounded),
+          ),
         ),
-        child: const Icon(Icons.chat_rounded),
       ),
       bottomNavigationBar: GymFlowNavBar(
         currentIndex: _currentIndex,
