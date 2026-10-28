@@ -143,4 +143,35 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('each growth stage opens Hổ Flow at that size', (tester) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.75;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(
+      MaterialApp(theme: AppTheme.lightTheme, home: const BossBattleScreen()),
+    );
+    await tester.runAsync(
+      () => Future<void>.delayed(const Duration(milliseconds: 50)),
+    );
+    await tester.pump();
+    for (final (i, name, note) in [
+      (0, 'Hổ con', 'Khởi đầu mỗi tháng'),
+      (1, 'Hổ teen', 'Cần 165 HP'),
+      (2, 'Chiến binh', 'Cần 500 HP'),
+    ]) {
+      await tester.ensureVisible(find.byKey(ValueKey('growth-stage-$i')));
+      await tester.tap(find.byKey(ValueKey('growth-stage-$i')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('Giai đoạn ${i + 1} · $name'), findsOneWidget);
+      expect(find.text(note), findsOneWidget);
+      expect(find.text('Hổ Flow đã đạt giai đoạn này ✓'), findsOneWidget);
+      await tester.tap(find.text('Đóng'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.textContaining('Giai đoạn ${i + 1}'), findsNothing);
+    }
+    expect(tester.takeException(), isNull);
+  });
 }

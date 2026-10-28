@@ -649,11 +649,7 @@ class _GrowthTrack extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = battle.progress;
-    final steps = [
-      ('Hổ con', 0.0),
-      ('Hổ teen', HoFlowGrowth.teen),
-      ('Chiến binh', 1.0),
-    ];
+    final steps = [for (final (name, at, _) in _stages) (name, at)];
     return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -674,6 +670,10 @@ class _GrowthTrack extends StatelessWidget {
               ),
             ],
           ),
+          Text(
+            'Chạm vào từng giai đoạn để xem Hổ Flow lớn lên',
+            style: AppTextStyles.caption.copyWith(color: Colors.white54),
+          ),
           const SizedBox(height: 12),
           LayoutBuilder(
             builder: (context, box) {
@@ -682,6 +682,8 @@ class _GrowthTrack extends StatelessWidget {
               return SizedBox(
                 height: 58,
                 child: Stack(
+                  // The stage halos reach past the track.
+                  clipBehavior: Clip.none,
                   children: [
                     Positioned(
                       left: dot / 2,
@@ -706,46 +708,59 @@ class _GrowthTrack extends StatelessWidget {
                         ),
                         top: 0,
                         width: label,
-                        child: Column(
-                          crossAxisAlignment: i == 0
-                              ? CrossAxisAlignment.start
-                              : i == 2
-                              ? CrossAxisAlignment.end
-                              : CrossAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: dot,
-                              height: dot,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: p >= at
-                                    ? AppColors.gymPointYellow
-                                    : _surface,
-                                border: Border.all(
-                                  color: p >= at
-                                      ? AppColors.ink
-                                      : Colors.white38,
-                                  width: 2,
+                        // Tap a stage to watch Hổ Flow grow into it.
+                        child: GestureDetector(
+                          key: ValueKey('growth-stage-$i'),
+                          behavior: HitTestBehavior.opaque,
+                          onTap: () => _showStage(context, battle, i),
+                          child: Column(
+                            crossAxisAlignment: i == 0
+                                ? CrossAxisAlignment.start
+                                : i == 2
+                                ? CrossAxisAlignment.end
+                                : CrossAxisAlignment.center,
+                            children: [
+                              _StagePulse(
+                                phase: i / _stages.length,
+                                lit: p >= at,
+                                size: dot,
+                                child: Container(
+                                  width: dot,
+                                  height: dot,
+                                  alignment: Alignment.center,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: p >= at
+                                        ? AppColors.gymPointYellow
+                                        : _surface,
+                                    border: Border.all(
+                                      color: p >= at
+                                          ? AppColors.ink
+                                          : Colors.white38,
+                                      width: 2,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '${i + 1}',
+                                    style: AppTextStyles.caption.copyWith(
+                                      color: p >= at
+                                          ? AppColors.ink
+                                          : Colors.white,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
                                 ),
                               ),
-                              child: Text(
-                                '${i + 1}',
+                              const SizedBox(height: 4),
+                              Text(
+                                name,
+                                maxLines: 1,
                                 style: AppTextStyles.caption.copyWith(
-                                  color: p >= at ? AppColors.ink : Colors.white,
-                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white70,
                                 ),
                               ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              name,
-                              maxLines: 1,
-                              style: AppTextStyles.caption.copyWith(
-                                color: Colors.white70,
-                              ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                   ],
@@ -755,6 +770,203 @@ class _GrowthTrack extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Growth stages: name, HP share needed, and the frame that shows it best.
+const _stages = [
+  ('Hổ con', 0.0, 0.0),
+  ('Hổ teen', HoFlowGrowth.teen, 0.42),
+  ('Chiến binh', 1.0, 1.0),
+];
+
+/// Hổ Flow grows from a cub into the chosen stage, centred over the arena.
+Future<void> _showStage(BuildContext context, BossBattle battle, int i) {
+  final (name, share, look) = _stages[i];
+  final needed = (battle.bossHp * share).ceil();
+  final reached = battle.tigerHp >= needed;
+  return showGeneralDialog(
+    context: context,
+    barrierDismissible: true,
+    barrierLabel: MaterialLocalizations.of(context).modalBarrierDismissLabel,
+    barrierColor: Colors.black.withValues(alpha: 0.7),
+    transitionDuration: const Duration(milliseconds: 240),
+    transitionBuilder: (context, a, _, child) => FadeTransition(
+      opacity: a,
+      child: ScaleTransition(
+        scale: Tween(
+          begin: 0.92,
+          end: 1.0,
+        ).animate(CurvedAnimation(parent: a, curve: Curves.easeOutBack)),
+        child: child,
+      ),
+    ),
+    pageBuilder: (context, _, _) => Center(
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          width: math.min(MediaQuery.sizeOf(context).width - 32, 340),
+          padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(28),
+            gradient: const RadialGradient(
+              center: Alignment(0, -0.3),
+              radius: 1,
+              colors: [Color(0xFF3B2F63), Color(0xFF1E1B2E)],
+            ),
+            border: Border.all(
+              color: AppColors.primaryOrange.withValues(alpha: 0.6),
+              width: 2,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Giai đoạn ${i + 1} · $name',
+                style: AppTextStyles.heading2.copyWith(color: Colors.white),
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 240,
+                child: Center(
+                  child: HoFlowGrowth(
+                    key: ValueKey('stage-preview-$i'),
+                    progress: look,
+                    from: 0,
+                    width: 230,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                i == 0 ? 'Khởi đầu mỗi tháng' : 'Cần ${formatHp(needed)} HP',
+                style: AppTextStyles.title.copyWith(color: AppColors.butter),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                reached
+                    ? 'Hổ Flow đã đạt giai đoạn này ✓'
+                    : 'Còn thiếu ${formatHp(needed - battle.tigerHp)} HP',
+                style: AppTextStyles.caption.copyWith(
+                  color: reached ? const Color(0xFF5ED39B) : Colors.white70,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primaryOrange,
+                    foregroundColor: AppColors.ink,
+                    textStyle: AppTextStyles.button,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Đóng'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+/// Soft breathing aura and a ring spreading out from a stage dot, so it
+/// reads as something to tap.
+class _StagePulse extends StatefulWidget {
+  final double phase, size;
+  final bool lit;
+  final Widget child;
+  const _StagePulse({
+    required this.phase,
+    required this.lit,
+    required this.size,
+    required this.child,
+  });
+  @override
+  State<_StagePulse> createState() => _StagePulseState();
+}
+
+class _StagePulseState extends State<_StagePulse>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 2000),
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (SpritePlayer.still(context)) {
+      _pulse.value = 0.4;
+    } else if (!_pulse.isAnimating) {
+      // Staggered so the three dots light up one after another.
+      _pulse.value = widget.phase;
+      _pulse.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final glow = widget.lit
+        ? AppColors.gymPointYellow
+        : const Color(0xFFFF9F43);
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (context, child) {
+        final v = _pulse.value;
+        final breath = math.sin(v * math.pi);
+        return Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            // Spreading hollow ring, drawn outside so the layout stays put.
+            Positioned(
+              left: -9 * v,
+              top: -9 * v,
+              right: -9 * v,
+              bottom: -9 * v,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: glow.withValues(alpha: 0.7 * (1 - v)),
+                    width: 2,
+                  ),
+                ),
+              ),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: glow.withValues(alpha: 0.25 + 0.35 * breath),
+                    blurRadius: 8 + 8 * breath,
+                    spreadRadius: 1 + 2 * breath,
+                  ),
+                ],
+              ),
+              child: child,
+            ),
+          ],
+        );
+      },
+      child: widget.child,
     );
   }
 }
