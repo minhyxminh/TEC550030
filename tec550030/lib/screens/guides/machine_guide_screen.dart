@@ -3,7 +3,9 @@ import 'package:material_ui/material_ui.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../models/form_exercise.dart';
 import '../../models/machine_guide.dart';
+import '../form_check/form_check_intro_screen.dart';
 import 'guide_video_screen.dart';
 import '../../widgets/app_card.dart';
 import '../../widgets/machine_guide_card.dart';
@@ -163,6 +165,80 @@ class MachineGuideScreen extends StatelessWidget {
               'Bắt đầu với mức tạ nhẹ và nhờ huấn luyện viên kiểm tra tư thế trong vài buổi đầu.',
               style: AppTextStyles.caption,
             ),
+            Builder(builder: (context) {
+              final exercise = formExerciseForGuide(guide.id);
+              if (exercise == null) return const SizedBox.shrink();
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: AppSpacing.xl),
+                  AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 36,
+                              height: 36,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF39FF14).withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(
+                                Icons.document_scanner_rounded,
+                                color: Color(0xFF1E9E5E),
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            const Text(
+                              'Kiểm tra form của bạn',
+                              style: AppTextStyles.heading2,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        const Text(
+                          'Xem hướng dẫn xong? Hãy thử thực hiện và kiểm tra chuyển động của bạn.',
+                          style: AppTextStyles.body,
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          height: 50,
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.ink,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(AppRadius.md),
+                              ),
+                              elevation: 0,
+                            ),
+                            icon: const Icon(Icons.play_arrow_rounded),
+                            label: const Text(
+                              'Bắt đầu Form Check',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                              ),
+                            ),
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => FormCheckIntroScreen(exercise: exercise),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              );
+            }),
           ],
         ),
       ),

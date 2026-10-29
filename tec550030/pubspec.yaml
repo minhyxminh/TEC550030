@@ -47,6 +47,8 @@ dependencies:
   local_auth: ^3.0.2
   url_launcher: ^6.3.3
   youtube_player_iframe: ^6.0.2
+  camera: ^0.12.2
+  google_mlkit_pose_detection: ^0.16.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
