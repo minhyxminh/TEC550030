@@ -193,15 +193,15 @@ class MachineGuideScreen extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 10),
-                            const Text(
-                              'Kiểm tra form của bạn',
+                            Text(
+                              exercise.cardTitle,
                               style: AppTextStyles.heading2,
                             ),
                           ],
                         ),
                         const SizedBox(height: 10),
-                        const Text(
-                          'Xem hướng dẫn xong? Hãy thử thực hiện và kiểm tra chuyển động của bạn.',
+                        Text(
+                          exercise.cardSubtitle,
                           style: AppTextStyles.body,
                         ),
                         const SizedBox(height: 16),

@@ -7,6 +7,7 @@ import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
 import 'package:material_ui/material_ui.dart';
 
 import '../../core/pose_math.dart';
+import '../../models/form_check_result.dart';
 import '../../models/form_exercise.dart';
 import '../../services/form_analysis_service.dart';
 import '../../widgets/pose_skeleton_painter.dart';
@@ -34,16 +35,39 @@ class _FormCameraScreenState extends State<FormCameraScreen> {
   Pose? _currentPose;
   Size _effectiveImageSize = Size.zero;
 
-  // Squat tracking data
+  // Squat tracking data (kept unchanged)
   double _minKneeAngle = 180.0;
   double _maxKneeAngle = 0.0;
   double _maxTorsoLean = 0.0;
   int _repCount = 0;
   int _validFrameCount = 0;
-
-  // Squat rep state machine: 0 = standing, 1 = descending, 2 = bottom reached
   bool _repWasStanding = false;
   bool _repInBottom = false;
+
+  // Leg Press tracking data
+  double _lpMinKneeAngle = 180.0;
+  double _lpMaxKneeAngle = 0.0;
+  double _lpMaxHipDrift = 0.0;
+  double? _lpBaseHipX;
+  double? _lpBaseHipY;
+  int _lpRepCount = 0;
+  int _lpValidFrameCount = 0;
+  bool _lpWasExtended = false;
+  bool _lpInBottom = false;
+
+  // Bicep Curl tracking data
+  double _bcMinElbowAngle = 180.0;
+  double _bcMaxElbowAngle = 0.0;
+  double _bcMaxElbowDrift = 0.0;
+  double _bcMaxShoulderMovement = 0.0;
+  double? _bcBaseElbowX;
+  double? _bcBaseElbowY;
+  double? _bcBaseShoulderX;
+  double? _bcBaseShoulderY;
+  int _bcRepCount = 0;
+  int _bcValidFrameCount = 0;
+  bool _bcWasExtended = false;
+  bool _bcInContracted = false;
 
   bool _isProcessing = false;
   bool _streamActive = false;
@@ -252,75 +276,244 @@ class _FormCameraScreenState extends State<FormCameraScreen> {
   }
 
   void _trackPose(Pose pose) {
+    switch (widget.exercise) {
+      case FormExercise.squat:
+        _trackSquatPose(pose);
+      case FormExercise.legPress:
+        _trackLegPressPose(pose);
+      case FormExercise.bicepCurl:
+        _trackBicepCurlPose(pose);
+    }
+  }
+
+  void _trackSquatPose(Pose pose) {
     final lms = pose.landmarks;
 
-    if (widget.exercise == FormExercise.squat) {
-      final lShoulder = lms[PoseLandmarkType.leftShoulder];
-      final lHip = lms[PoseLandmarkType.leftHip];
-      final lKnee = lms[PoseLandmarkType.leftKnee];
-      final lAnkle = lms[PoseLandmarkType.leftAnkle];
+    final lShoulder = lms[PoseLandmarkType.leftShoulder];
+    final lHip = lms[PoseLandmarkType.leftHip];
+    final lKnee = lms[PoseLandmarkType.leftKnee];
+    final lAnkle = lms[PoseLandmarkType.leftAnkle];
 
-      final rShoulder = lms[PoseLandmarkType.rightShoulder];
-      final rHip = lms[PoseLandmarkType.rightHip];
-      final rKnee = lms[PoseLandmarkType.rightKnee];
-      final rAnkle = lms[PoseLandmarkType.rightAnkle];
+    final rShoulder = lms[PoseLandmarkType.rightShoulder];
+    final rHip = lms[PoseLandmarkType.rightHip];
+    final rKnee = lms[PoseLandmarkType.rightKnee];
+    final rAnkle = lms[PoseLandmarkType.rightAnkle];
 
-      final lConfidence = _averageConfidence([
-        lShoulder?.likelihood,
-        lHip?.likelihood,
-        lKnee?.likelihood,
-        lAnkle?.likelihood,
-      ]);
+    final lConfidence = _averageConfidence([
+      lShoulder?.likelihood,
+      lHip?.likelihood,
+      lKnee?.likelihood,
+      lAnkle?.likelihood,
+    ]);
 
-      final rConfidence = _averageConfidence([
-        rShoulder?.likelihood,
-        rHip?.likelihood,
-        rKnee?.likelihood,
-        rAnkle?.likelihood,
-      ]);
+    final rConfidence = _averageConfidence([
+      rShoulder?.likelihood,
+      rHip?.likelihood,
+      rKnee?.likelihood,
+      rAnkle?.likelihood,
+    ]);
 
-      // Choose side with better visibility
-      final bool useLeft = lConfidence >= rConfidence;
-      final hip = useLeft ? lHip : rHip;
-      final knee = useLeft ? lKnee : rKnee;
-      final ankle = useLeft ? lAnkle : rAnkle;
-      final shoulder = useLeft ? lShoulder : rShoulder;
+    // Choose side with better visibility
+    final bool useLeft = lConfidence >= rConfidence;
+    final hip = useLeft ? lHip : rHip;
+    final knee = useLeft ? lKnee : rKnee;
+    final ankle = useLeft ? lAnkle : rAnkle;
+    final shoulder = useLeft ? lShoulder : rShoulder;
 
-      if (hip == null || knee == null || ankle == null) return;
-      if (hip.likelihood < 0.4 || knee.likelihood < 0.4 || ankle.likelihood < 0.4) {
-        return;
-      }
-
-      final kneeAngle = angleDeg(
-        (x: hip.x, y: hip.y),
-        (x: knee.x, y: knee.y),
-        (x: ankle.x, y: ankle.y),
-      );
-
-      _minKneeAngle = math.min(_minKneeAngle, kneeAngle);
-      _maxKneeAngle = math.max(_maxKneeAngle, kneeAngle);
-
-      // Torso lean relative to vertical (dx / dy)
-      if (shoulder != null && shoulder.likelihood >= 0.4) {
-        final dx = (shoulder.x - hip.x).abs();
-        final dy = (shoulder.y - hip.y).abs();
-        final torsoAngle = math.atan2(dx, dy) * 180 / math.pi;
-        _maxTorsoLean = math.max(_maxTorsoLean, torsoAngle);
-      }
-
-      // Rep state machine: standing (>155°) -> bottom (<115°) -> standing (>155°)
-      if (kneeAngle > 155) {
-        if (_repInBottom) {
-          _repCount++;
-          _repInBottom = false;
-        }
-        _repWasStanding = true;
-      } else if (kneeAngle < 115 && _repWasStanding) {
-        _repInBottom = true;
-      }
-
-      _validFrameCount++;
+    if (hip == null || knee == null || ankle == null) return;
+    if (hip.likelihood < 0.4 || knee.likelihood < 0.4 || ankle.likelihood < 0.4) {
+      return;
     }
+
+    final kneeAngle = angleDeg(
+      (x: hip.x, y: hip.y),
+      (x: knee.x, y: knee.y),
+      (x: ankle.x, y: ankle.y),
+    );
+
+    _minKneeAngle = math.min(_minKneeAngle, kneeAngle);
+    _maxKneeAngle = math.max(_maxKneeAngle, kneeAngle);
+
+    // Torso lean relative to vertical (dx / dy)
+    if (shoulder != null && shoulder.likelihood >= 0.4) {
+      final dx = (shoulder.x - hip.x).abs();
+      final dy = (shoulder.y - hip.y).abs();
+      final torsoAngle = math.atan2(dx, dy) * 180 / math.pi;
+      _maxTorsoLean = math.max(_maxTorsoLean, torsoAngle);
+    }
+
+    // Rep state machine: standing (>155°) -> bottom (<115°) -> standing (>155°)
+    if (kneeAngle > 155) {
+      if (_repInBottom) {
+        _repCount++;
+        _repInBottom = false;
+      }
+      _repWasStanding = true;
+    } else if (kneeAngle < 115 && _repWasStanding) {
+      _repInBottom = true;
+    }
+
+    _validFrameCount++;
+  }
+
+  void _trackLegPressPose(Pose pose) {
+    final lms = pose.landmarks;
+
+    final lShoulder = lms[PoseLandmarkType.leftShoulder];
+    final lHip = lms[PoseLandmarkType.leftHip];
+    final lKnee = lms[PoseLandmarkType.leftKnee];
+    final lAnkle = lms[PoseLandmarkType.leftAnkle];
+
+    final rShoulder = lms[PoseLandmarkType.rightShoulder];
+    final rHip = lms[PoseLandmarkType.rightHip];
+    final rKnee = lms[PoseLandmarkType.rightKnee];
+    final rAnkle = lms[PoseLandmarkType.rightAnkle];
+
+    final lConfidence = _averageConfidence([
+      lShoulder?.likelihood,
+      lHip?.likelihood,
+      lKnee?.likelihood,
+      lAnkle?.likelihood,
+    ]);
+
+    final rConfidence = _averageConfidence([
+      rShoulder?.likelihood,
+      rHip?.likelihood,
+      rKnee?.likelihood,
+      rAnkle?.likelihood,
+    ]);
+
+    // Choose side with better visibility
+    final bool useLeft = lConfidence >= rConfidence;
+    final hip = useLeft ? lHip : rHip;
+    final knee = useLeft ? lKnee : rKnee;
+    final ankle = useLeft ? lAnkle : rAnkle;
+
+    if (hip == null || knee == null || ankle == null) return;
+    if (hip.likelihood < 0.4 || knee.likelihood < 0.4 || ankle.likelihood < 0.4) {
+      return;
+    }
+
+    final kneeAngle = angleDeg(
+      (x: hip.x, y: hip.y),
+      (x: knee.x, y: knee.y),
+      (x: ankle.x, y: ankle.y),
+    );
+
+    _lpMinKneeAngle = math.min(_lpMinKneeAngle, kneeAngle);
+    _lpMaxKneeAngle = math.max(_lpMaxKneeAngle, kneeAngle);
+
+    // Normalized hip drift relative to upper leg length (hip to knee)
+    final upperLegLength = math.sqrt(
+      math.pow(knee.x - hip.x, 2) + math.pow(knee.y - hip.y, 2),
+    );
+
+    _lpBaseHipX ??= hip.x;
+    _lpBaseHipY ??= hip.y;
+
+    if (upperLegLength > 10) {
+      final hipDisplacement = math.sqrt(
+        math.pow(hip.x - _lpBaseHipX!, 2) + math.pow(hip.y - _lpBaseHipY!, 2),
+      );
+      final normalizedDrift = hipDisplacement / upperLegLength;
+      _lpMaxHipDrift = math.max(_lpMaxHipDrift, normalizedDrift);
+    }
+
+    // Rep state machine for Leg Press: extended (>150°) -> flexed (<115°) -> extended (>150°)
+    if (kneeAngle > 150) {
+      if (_lpInBottom) {
+        _lpRepCount++;
+        _lpInBottom = false;
+      }
+      _lpWasExtended = true;
+    } else if (kneeAngle < 115 && _lpWasExtended) {
+      _lpInBottom = true;
+    }
+
+    _lpValidFrameCount++;
+  }
+
+  void _trackBicepCurlPose(Pose pose) {
+    final lms = pose.landmarks;
+
+    final lShoulder = lms[PoseLandmarkType.leftShoulder];
+    final lElbow = lms[PoseLandmarkType.leftElbow];
+    final lWrist = lms[PoseLandmarkType.leftWrist];
+
+    final rShoulder = lms[PoseLandmarkType.rightShoulder];
+    final rElbow = lms[PoseLandmarkType.rightElbow];
+    final rWrist = lms[PoseLandmarkType.rightWrist];
+
+    final lConfidence = _averageConfidence([
+      lShoulder?.likelihood,
+      lElbow?.likelihood,
+      lWrist?.likelihood,
+    ]);
+
+    final rConfidence = _averageConfidence([
+      rShoulder?.likelihood,
+      rElbow?.likelihood,
+      rWrist?.likelihood,
+    ]);
+
+    // Choose arm with stronger visibility
+    final bool useLeft = lConfidence >= rConfidence;
+    final shoulder = useLeft ? lShoulder : rShoulder;
+    final elbow = useLeft ? lElbow : rElbow;
+    final wrist = useLeft ? lWrist : rWrist;
+
+    if (shoulder == null || elbow == null || wrist == null) return;
+    if (shoulder.likelihood < 0.4 || elbow.likelihood < 0.4 || wrist.likelihood < 0.4) {
+      return;
+    }
+
+    final elbowAngle = angleDeg(
+      (x: shoulder.x, y: shoulder.y),
+      (x: elbow.x, y: elbow.y),
+      (x: wrist.x, y: wrist.y),
+    );
+
+    _bcMinElbowAngle = math.min(_bcMinElbowAngle, elbowAngle);
+    _bcMaxElbowAngle = math.max(_bcMaxElbowAngle, elbowAngle);
+
+    // Upper arm length reference (shoulder to elbow)
+    final upperArmLength = math.sqrt(
+      math.pow(elbow.x - shoulder.x, 2) + math.pow(elbow.y - shoulder.y, 2),
+    );
+
+    _bcBaseElbowX ??= elbow.x;
+    _bcBaseElbowY ??= elbow.y;
+    _bcBaseShoulderX ??= shoulder.x;
+    _bcBaseShoulderY ??= shoulder.y;
+
+    if (upperArmLength > 10) {
+      // Normalized elbow drift
+      final elbowDisp = math.sqrt(
+        math.pow(elbow.x - _bcBaseElbowX!, 2) + math.pow(elbow.y - _bcBaseElbowY!, 2),
+      );
+      _bcMaxElbowDrift = math.max(_bcMaxElbowDrift, elbowDisp / upperArmLength);
+
+      // Normalized shoulder/body swing
+      final shoulderDisp = math.sqrt(
+        math.pow(shoulder.x - _bcBaseShoulderX!, 2) +
+            math.pow(shoulder.y - _bcBaseShoulderY!, 2),
+      );
+      _bcMaxShoulderMovement =
+          math.max(_bcMaxShoulderMovement, shoulderDisp / upperArmLength);
+    }
+
+    // Rep state machine for Bicep Curl: extended (>145°) -> contracted (<70°) -> extended (>145°)
+    if (elbowAngle > 145) {
+      if (_bcInContracted) {
+        _bcRepCount++;
+        _bcInContracted = false;
+      }
+      _bcWasExtended = true;
+    } else if (elbowAngle < 70 && _bcWasExtended) {
+      _bcInContracted = true;
+    }
+
+    _bcValidFrameCount++;
   }
 
   double _averageConfidence(List<double?> values) {
@@ -338,14 +531,33 @@ class _FormCameraScreenState extends State<FormCameraScreen> {
     await _stopStream();
 
     const service = FormAnalysisService();
-    final sessionData = SquatSessionData()
-      ..minKneeAngle = _minKneeAngle == 180.0 ? 150.0 : _minKneeAngle
-      ..maxKneeAngle = _maxKneeAngle
-      ..maxTorsoLean = _maxTorsoLean
-      ..repCount = _repCount
-      ..validFrameCount = _validFrameCount;
-
-    final result = service.analyseSquat(sessionData);
+    final FormCheckResult result = switch (widget.exercise) {
+      FormExercise.squat => service.analyseSquat(
+          SquatSessionData()
+            ..minKneeAngle = _minKneeAngle == 180.0 ? 150.0 : _minKneeAngle
+            ..maxKneeAngle = _maxKneeAngle
+            ..maxTorsoLean = _maxTorsoLean
+            ..repCount = _repCount
+            ..validFrameCount = _validFrameCount,
+        ),
+      FormExercise.legPress => service.analyseLegPress(
+          LegPressSessionData()
+            ..minKneeAngle = _lpMinKneeAngle == 180.0 ? 150.0 : _lpMinKneeAngle
+            ..maxKneeAngle = _lpMaxKneeAngle
+            ..maxHipDrift = _lpMaxHipDrift
+            ..repCount = _lpRepCount
+            ..validFrameCount = _lpValidFrameCount,
+        ),
+      FormExercise.bicepCurl => service.analyseBicepCurl(
+          BicepCurlSessionData()
+            ..minElbowAngle = _bcMinElbowAngle == 180.0 ? 150.0 : _bcMinElbowAngle
+            ..maxElbowAngle = _bcMaxElbowAngle
+            ..maxElbowDrift = _bcMaxElbowDrift
+            ..maxShoulderMovement = _bcMaxShoulderMovement
+            ..repCount = _bcRepCount
+            ..validFrameCount = _bcValidFrameCount,
+        ),
+    };
 
     if (!mounted) return;
     Navigator.pushReplacement(

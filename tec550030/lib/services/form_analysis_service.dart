@@ -9,11 +9,19 @@ class SquatSessionData {
   int validFrameCount = 0;
 }
 
+class LegPressSessionData {
+  double minKneeAngle = 180;
+  double maxKneeAngle = 0;
+  double maxHipDrift = 0; // Normalized body displacement
+  int repCount = 0;
+  int validFrameCount = 0;
+}
+
 class BicepCurlSessionData {
   double minElbowAngle = 180;
   double maxElbowAngle = 0;
-  double maxElbowDrift = 0;
-  double maxShoulderMovement = 0;
+  double maxElbowDrift = 0; // Normalized drift / upper arm length
+  double maxShoulderMovement = 0; // Normalized movement / upper arm length
   int repCount = 0;
   int validFrameCount = 0;
 }
@@ -128,6 +136,121 @@ class FormAnalysisService {
     );
   }
 
+  FormCheckResult analyseLegPress(LegPressSessionData data) {
+    if (data.validFrameCount < 10) {
+      return const FormCheckResult(
+        exercise: FormExercise.legPress,
+        score: 30,
+        rating: FormRating.tryAgain,
+        metrics: [
+          FormMetric(label: 'Số khung hình nhận diện', value: 'Chưa đủ'),
+        ],
+        feedback: [
+          'Hãy điều chỉnh camera để thấy rõ hông, đầu gối và mắt cá chân.',
+          'Giữ toàn bộ chân trong khung hình.',
+        ],
+        repCount: 0,
+        validFrameCount: 0,
+      );
+    }
+
+    // A. Range of motion (50 points)
+    // Target depth at flexed position: 80° - 115°
+    final depth = data.minKneeAngle;
+    int romScore;
+    String romFeedback;
+    String romQuality;
+
+    if (depth < 70) {
+      romScore = 40;
+      romFeedback = 'Không cần hạ quá sâu.';
+      romQuality = 'Hơi sâu';
+    } else if (depth <= 95) {
+      romScore = 50;
+      romFeedback = 'Biên độ Leg Press tốt.';
+      romQuality = 'Tốt';
+    } else if (depth <= 115) {
+      romScore = 40;
+      romFeedback = 'Biên độ Leg Press tốt.';
+      romQuality = 'Đạt';
+    } else if (depth <= 135) {
+      romScore = 25;
+      romFeedback = 'Hạ bàn đạp thêm một chút để hoàn thiện biên độ.';
+      romQuality = 'Hơi nông';
+    } else {
+      romScore = 10;
+      romFeedback = 'Hạ bàn đạp thêm một chút để hoàn thiện biên độ.';
+      romQuality = 'Cần cải thiện';
+    }
+
+    // B. Movement stability (30 points)
+    // Normalized hip movement relative to upper leg length
+    final hipDrift = data.maxHipDrift;
+    int stabilityScore;
+    String? stabilityFeedback;
+    String stabilityQuality;
+
+    if (hipDrift <= 0.10) {
+      stabilityScore = 30;
+      stabilityQuality = 'Rất ổn định';
+    } else if (hipDrift <= 0.22) {
+      stabilityScore = 20;
+      stabilityQuality = 'Ổn định';
+      stabilityFeedback = 'Giữ chuyển động ổn định hơn.';
+    } else {
+      stabilityScore = 8;
+      stabilityQuality = 'Có rung lắc';
+      stabilityFeedback = 'Giữ hông cố định vào đệm và chuyển động đều nhịp.';
+    }
+
+    // C. Completed repetition (20 points)
+    int repScore;
+    String? repFeedback;
+    if (data.repCount >= 1) {
+      repScore = 20;
+    } else {
+      repScore = 0;
+      repFeedback = 'Hãy hoàn thành đủ một nhịp xuống và đẩy lên.';
+    }
+
+    final totalScore = (romScore + stabilityScore + repScore).clamp(0, 100);
+
+    final feedbackList = <String>[
+      romFeedback,
+      ?stabilityFeedback,
+      ?repFeedback,
+    ].take(3).toList();
+
+    return FormCheckResult(
+      exercise: FormExercise.legPress,
+      score: totalScore,
+      rating: FormRatingX.fromScore(totalScore),
+      metrics: [
+        FormMetric(
+          label: 'Góc gối nhỏ nhất',
+          value: '${depth.toStringAsFixed(0)}°',
+          quality: romQuality,
+        ),
+        FormMetric(
+          label: 'Biên độ chuyển động',
+          value: romQuality,
+        ),
+        FormMetric(
+          label: 'Độ ổn định chuyển động',
+          value: stabilityQuality,
+        ),
+        FormMetric(
+          label: 'Số lần hoàn chỉnh',
+          value: '${data.repCount} rep',
+          quality: data.repCount >= 1 ? 'Đạt' : 'Chưa đạt',
+        ),
+      ],
+      feedback: feedbackList,
+      repCount: data.repCount,
+      validFrameCount: data.validFrameCount,
+    );
+  }
+
   FormCheckResult analyseBicepCurl(BicepCurlSessionData data) {
     if (data.validFrameCount < 10) {
       return const FormCheckResult(
@@ -138,8 +261,8 @@ class FormAnalysisService {
           FormMetric(label: 'Nhận diện chuyển động', value: 'Chưa đủ khung hình'),
         ],
         feedback: [
-          'Camera chưa nhìn rõ vai, khuỷu tay và cổ tay.',
-          'Hãy điều chỉnh góc đứng nhìn thấy rõ cánh tay.',
+          'Hãy điều chỉnh camera để thấy rõ vai, khuỷu tay và cổ tay.',
+          'Đảm bảo nhìn rõ cánh tay trong suốt chuyển động.',
         ],
         repCount: 0,
         validFrameCount: 0,
@@ -151,42 +274,74 @@ class FormAnalysisService {
     final goodExtension = maxElbow >= 145;
     final goodContraction = minElbow <= 70;
 
-    int romScore = 15;
+    // A. Range of motion (50 points)
+    int romScore;
+    String romFeedback;
+    String romQuality;
+
     if (goodExtension && goodContraction) {
       romScore = 50;
+      romFeedback = 'Biên độ chuyển động tốt.';
+      romQuality = 'Tốt';
     } else if (goodExtension || goodContraction) {
       romScore = 32;
-    }
-
-    String romFeedback;
-    if (!goodContraction) {
-      romFeedback = 'Curl tạ lên cao hơn một chút.';
-    } else if (!goodExtension) {
-      romFeedback = 'Duỗi tay thêm ở cuối nhịp.';
+      romQuality = 'Khá';
+      if (!goodContraction) {
+        romFeedback = 'Curl lên cao hơn một chút.';
+      } else {
+        romFeedback = 'Duỗi tay thêm ở cuối nhịp.';
+      }
     } else {
-      romFeedback = 'Biên độ chuyển động tốt.';
+      romScore = 15;
+      romQuality = 'Cần cải thiện';
+      romFeedback = 'Biên độ chuyển động còn hạn chế.';
     }
 
-    int elbowScore = 10;
+    // B. Elbow stability (30 points)
+    int elbowScore;
     String? elbowFeedback;
+    String elbowQuality;
+
     if (data.maxElbowDrift <= 0.10) {
       elbowScore = 30;
+      elbowQuality = 'Ổn định';
     } else if (data.maxElbowDrift <= 0.20) {
       elbowScore = 20;
-      elbowFeedback = 'Cố định khuỷu tay sát thân sườn.';
+      elbowQuality = 'Có rung lắc';
+      elbowFeedback = 'Giữ khuỷu tay gần vị trí ban đầu.';
     } else {
-      elbowFeedback = 'Khuỷu tay bị vung ra trước quá nhiều.';
+      elbowScore = 8;
+      elbowQuality = 'Lệch nhiều';
+      elbowFeedback = 'Giữ khuỷu tay gần vị trí ban đầu.';
     }
 
-    int shoulderScore = 10;
+    // C. Shoulder/body stability (20 points)
+    int shoulderScore;
     String? shoulderFeedback;
+
     if (data.maxShoulderMovement <= 0.08) {
       shoulderScore = 20;
+    } else if (data.maxShoulderMovement <= 0.16) {
+      shoulderScore = 12;
+      shoulderFeedback = 'Hạn chế đung đưa vai và thân người.';
     } else {
-      shoulderFeedback = 'Hạn chế đung đưa vai và thân người để lấy đà.';
+      shoulderScore = 4;
+      shoulderFeedback = 'Hạn chế đung đưa vai và thân người.';
+    }
+
+    String? repFeedback;
+    if (data.repCount == 0) {
+      repFeedback = 'Hãy hoàn thành trọn vẹn một nhịp cuốn lên và hạ xuống.';
     }
 
     final totalScore = (romScore + elbowScore + shoulderScore).clamp(0, 100);
+
+    final feedbackList = <String>[
+      romFeedback,
+      ?elbowFeedback,
+      ?shoulderFeedback,
+      ?repFeedback,
+    ].take(3).toList();
 
     return FormCheckResult(
       exercise: FormExercise.bicepCurl,
@@ -194,24 +349,25 @@ class FormAnalysisService {
       rating: FormRatingX.fromScore(totalScore),
       metrics: [
         FormMetric(
-          label: 'Góc khuỷu tay nhỏ nhất',
+          label: 'Góc khuỷu nhỏ nhất',
           value: '${minElbow.toStringAsFixed(0)}°',
-          quality: goodContraction ? 'Tốt' : 'Cần gập thêm',
+          quality: romQuality,
         ),
         FormMetric(
-          label: 'Cố định khuỷu tay',
-          value: data.maxElbowDrift <= 0.12 ? 'Ổn định' : 'Có rung lắc',
+          label: 'Biên độ chuyển động',
+          value: romQuality,
+        ),
+        FormMetric(
+          label: 'Độ ổn định khuỷu tay',
+          value: elbowQuality,
         ),
         FormMetric(
           label: 'Số lần hoàn chỉnh',
           value: '${data.repCount} rep',
+          quality: data.repCount >= 1 ? 'Đạt' : 'Chưa đạt',
         ),
       ],
-      feedback: [
-        romFeedback,
-        ?elbowFeedback,
-        ?shoulderFeedback,
-      ].take(3).toList(),
+      feedback: feedbackList,
       repCount: data.repCount,
       validFrameCount: data.validFrameCount,
     );
